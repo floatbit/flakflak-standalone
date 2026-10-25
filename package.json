@@ -1,0 +1,25 @@
+{
+  "name": "flakflak",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "app",
+    "embed"
+  ],
+  "scripts": {
+    "build": "npm run build -w app && npm run build -w embed",
+    "typecheck": "npm run typecheck -w app && npm run typecheck -w embed",
+    "test": "node --test tests/*.test.mjs",
+    "dev:app": "npm run dev -w app",
+    "dev:embed": "npm run dev -w embed",
+    "test:browser": "playwright test",
+    "format": "prettier --write \"{app,embed,shared}/**/*.{ts,vue,css,json,html}\" \"tests/browser/**/*.ts\" playwright.config.ts"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "prettier": "^3.9.10"
+  }
+}

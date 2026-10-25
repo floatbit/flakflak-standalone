@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>FlakFlak · Second demo site</title
+  ><style>
+    body {
+      font:
+        18px/1.7 Georgia,
+        serif;
+      margin: 0;
+      background: #fff7ed;
+      color: #43332b;
+    }
+    main {
+      max-width: 1000px;
+      padding: 60px 25px;
+      margin: auto;
+    }
+    h1 {
+      font-size: 60px;
+      line-height: 1.1;
+    }
+    section {
+      margin: 60px 0;
+      padding: 40px;
+      background: #f4dfc8;
+      border-radius: 18px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+    article {
+      padding: 25px;
+      background: white;
+      border-radius: 10px;
+    }
+    footer {
+      margin-top: 400px;
+    }
+  </style>
+  <main>
+    <p>FLAKFLAK / SECOND TEST ORIGIN</p>
+    <h1>A different site.<br />The same feedback tool.</h1>
+    <p>
+      Shift + click anywhere to leave a comment. Resize the page and reload to
+      test your dots.
+    </p>
+    <section id="intro">
+      <h2>Built for discussion</h2>
+      <p>Mark this text, leave a reply, or attach a screenshot.</p>
+    </section>
+    <div class="grid">
+      <article id="one">
+        <h2>Design</h2>
+        <p>Make the little details better.</p>
+      </article>
+      <article id="two">
+        <h2>Content</h2>
+        <p>Give every word a purpose.</p>
+      </article>
+      <article id="three">
+        <h2>Review</h2>
+        <p>Keep the conversation in context.</p>
+      </article>
+    </div>
+    <footer id="footer">
+      <h2>The bottom of the page</h2>
+      <p>Test restoring a comment after scrolling.</p>
+    </footer>
+  </main>
+  <script>
+    const site = new URLSearchParams(location.search).get("site");
+    if (site) {
+      const s = document.createElement("script");
+      s.src = "/widget.js";
+      s.dataset.siteId = site;
+      document.body.append(s);
+    }
+  </script>
+</html>

@@ -1,26 +1,15 @@
 export const themes = [
   "graphite",
   "carbon",
-  "midnight",
-  "slate",
-  "cobalt",
   "emerald",
   "synthwave",
   "linen",
   "windows311",
-  "windows95",
   "windowsxp",
   "macintosh",
   "macos9",
-  "aqua",
-  "nextstep",
-  "amiga",
   "gameboy",
-  "nes",
   "commodore64",
-  "pipboy",
-  "terminal",
-  "blueprint",
 ] as const;
 export type Theme = (typeof themes)[number];
 export interface Preferences {
@@ -36,9 +25,20 @@ export function preferences(value: unknown): Preferences {
       ? (value as Record<string, unknown>)
       : {};
   const aliases: Record<string, Theme> = {
-    blurple: "slate",
+    slate: "graphite",
+    aqua: "macos9",
+    nes: "graphite",
+    pipboy: "emerald",
+    cobalt: "graphite",
+    terminal: "graphite",
+    blueprint: "graphite",
+    midnight: "graphite",
+    windows95: "windows311",
+    amiga: "windowsxp",
+    nextstep: "carbon",
+    blurple: "graphite",
     paper: "linen",
-    harbor: "cobalt",
+    harbor: "graphite",
     spotify: "emerald",
   };
   if (typeof v.theme === "string" && aliases[v.theme])

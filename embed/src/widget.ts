@@ -1593,27 +1593,18 @@ function start(siteId: string, base: string) {
         "theme",
         themes.map((theme) => ({
           label:
-            theme === "windows95"
-              ? "Windows 95"
-              : theme === "macos9"
-                ? "Mac OS 9"
-                : theme === "windowsxp"
-                  ? "Windows XP"
-                  : theme === "gameboy"
-                    ? "Game Boy"
-                    : theme === "windows311"
-                      ? "Windows 3.11"
-                      : theme === "commodore64"
-                        ? "C64"
-                        : theme === "nes"
-                          ? "NES"
-                          : theme === "nextstep"
-                            ? "NeXTSTEP"
-                            : theme === "pipboy"
-                              ? "Pip-Boy"
-                              : theme === "synthwave"
-                                ? "Neon"
-                                : theme[0].toUpperCase() + theme.slice(1),
+            (
+              {
+                windows311: "Windows 3.11",
+                windowsxp: "Windows XP",
+                macos9: "Mac OS 9",
+                gameboy: "Game Boy",
+                commodore64: "C64",
+                nes: "NES",
+                pipboy: "Pip-Boy",
+                synthwave: "Neon",
+              } as Record<string, string>
+            )[theme] || theme[0].toUpperCase() + theme.slice(1),
           value: theme,
         })),
       );

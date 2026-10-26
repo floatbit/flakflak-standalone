@@ -398,23 +398,6 @@ progress {
   margin-top: 20px;
 }
 
-:host([data-theme="midnight"]) {
-  --ff-bg: #131b2b;
-  --ff-header: #19243a;
-  --ff-surface: #202d43;
-  --ff-control: #293952;
-  --ff-hover: #324763;
-  --ff-divider: #3c4d68;
-  --ff-border: #5e7392;
-  --ff-text: #edf2ff;
-  --ff-muted: #b3c3dd;
-  --ff-accent: #b5c3ff;
-  --ff-primary: #b5c3ff;
-  --ff-primary-hover: #d2daff;
-  --ff-primary-text: #18223a;
-  --ff-selected: #344366;
-}
-
 :host([data-side="right"]) .sidebar {
   left: auto;
   right: 12px;
@@ -499,9 +482,6 @@ progress {
 }
 .theme-swatch[data-theme="graphite"] {
   background: linear-gradient(90deg, #191b1e 65%, #9cbeff 65%);
-}
-.theme-swatch[data-theme="midnight"] {
-  background: linear-gradient(90deg, #131b2b 65%, #b5c3ff 65%);
 }
 .review-navigation {
   display: flex;
@@ -1749,99 +1729,7 @@ progress::-moz-progress-bar {
   background: linear-gradient(90deg, #111214 65%, #d2d9e4 65%);
 }
 
-:host([data-theme="windows95"]) {
-  --ff-bg: #c0c0c0;
-  --ff-header: #c0c0c0;
-  --ff-surface: #ffffff;
-  --ff-control: #c0c0c0;
-  --ff-hover: #d4d4d4;
-  --ff-divider: #808080;
-  --ff-border: #555555;
-  --ff-text: #000000;
-  --ff-muted: #404040;
-  --ff-accent: #000080;
-  --ff-primary: #c0c0c0;
-  --ff-primary-hover: #d4d4d4;
-  --ff-primary-text: #000000;
-  --ff-selected: #b4b4cc;
-}
-
-.theme-swatch[data-theme="windows95"] {
-  background: linear-gradient(90deg, #c0c0c0 65%, #000080 65%);
-}
-
 /* Classic Windows chrome, contained entirely within the widget. */
-:host([data-theme="windows95"]) {
-  color-scheme: light;
-}
-:host([data-theme="windows95"]) .sidebar,
-:host([data-theme="windows95"]) .panel,
-:host([data-theme="windows95"]) .name-dialog {
-  border-radius: 0;
-  border: 2px solid;
-  border-color: #fff #404040 #404040 #fff;
-  box-shadow: 2px 2px 0 #0006;
-}
-:host([data-theme="windows95"]) .titlebar {
-  background: #000080;
-  color: #fff;
-}
-:host([data-theme="windows95"]) .sidebar > .titlebar > strong,
-:host([data-theme="windows95"]) .titlebar .comment-date,
-:host([data-theme="windows95"]) .titlebar button {
-  color: #fff;
-}
-:host([data-theme="windows95"])
-  button:not(.dot):not(.reply-trash):not(.edit-pencil):not(.text-link):not(
-    .file-remove
-  ) {
-  border-radius: 0;
-  border: 2px solid;
-  border-color: #fff #404040 #404040 #fff;
-  box-shadow: none;
-}
-:host([data-theme="windows95"]) button[aria-pressed="true"]:not(.dot),
-:host([data-theme="windows95"]) .titlebar button[aria-expanded="true"] {
-  border-color: #404040 #fff #fff #404040;
-  background: #b4b4cc;
-}
-:host([data-theme="windows95"]) input,
-:host([data-theme="windows95"]) textarea {
-  border-radius: 0;
-  border: 2px solid;
-  border-color: #808080 #fff #fff #808080;
-  background: #fff;
-}
-:host([data-theme="windows95"]) .reply,
-:host([data-theme="windows95"]) .activity-card,
-:host([data-theme="windows95"]) .total-card,
-:host([data-theme="windows95"]) .page-row {
-  border-radius: 0;
-}
-:host([data-theme="windows95"]) .thread .status-grid button {
-  color: #000;
-}
-:host([data-theme="windows95"])
-  .sidebar
-  > .titlebar
-  button[aria-label="Settings"][aria-expanded="true"],
-:host([data-theme="windows95"])
-  .sidebar
-  > .titlebar
-  .header-view-icons
-  button[aria-pressed="true"] {
-  color: #000080;
-}
-:host([data-theme="windows95"]) .site-total {
-  border-radius: 0;
-}
-:host([data-theme="windows95"]) .site-total strong,
-:host([data-theme="windows95"]) .page-counts span {
-  color: #000080 !important;
-}
-:host([data-theme="windows95"]) .reply p strong[style] {
-  color: #000080 !important;
-}
 
 :host([data-theme="macos9"]) {
   --ff-bg: #dddddd;
@@ -1883,27 +1771,6 @@ progress::-moz-progress-bar {
 
 .theme-swatch[data-theme="windowsxp"] {
   background: linear-gradient(90deg, #ece9d8 65%, #174b9b 65%);
-}
-
-:host([data-theme="terminal"]) {
-  --ff-bg: #100d07;
-  --ff-header: #1b160b;
-  --ff-surface: #211b0e;
-  --ff-control: #2b2312;
-  --ff-hover: #382e17;
-  --ff-divider: #534324;
-  --ff-border: #8b703c;
-  --ff-text: #ffdd97;
-  --ff-muted: #d3b778;
-  --ff-accent: #ffc15a;
-  --ff-primary: #ffc15a;
-  --ff-primary-hover: #ffd38a;
-  --ff-primary-text: #241806;
-  --ff-selected: #4b3617;
-}
-
-.theme-swatch[data-theme="terminal"] {
-  background: linear-gradient(90deg, #100d07 65%, #ffc15a 65%);
 }
 
 :host([data-theme="macos9"]),
@@ -1987,22 +1854,6 @@ progress::-moz-progress-bar {
 :host([data-theme="macos9"]) .thread .status-grid button,
 :host([data-theme="windowsxp"]) .thread .status-grid button {
   color: var(--ff-text);
-}
-:host([data-theme="terminal"]) {
-  --ff-font-family: "Courier New", Courier, monospace;
-}
-:host([data-theme="terminal"]) .sidebar,
-:host([data-theme="terminal"]) .panel,
-:host([data-theme="terminal"]) .name-dialog,
-:host([data-theme="terminal"]) button:not(.dot),
-:host([data-theme="terminal"]) input,
-:host([data-theme="terminal"]) textarea,
-:host([data-theme="terminal"]) .reply,
-:host([data-theme="terminal"]) .activity-card {
-  border-radius: 0;
-}
-:host([data-theme="terminal"]) .sidebar > .titlebar > strong {
-  color: #ffc15a;
 }
 
 /* One compact geometry for sidebar chrome across all palettes. */
@@ -2104,27 +1955,6 @@ progress::-moz-progress-bar {
   color: #172d16;
 }
 
-:host([data-theme="aqua"]) {
-  --ff-bg: #e9edf2;
-  --ff-header: #d6dce4;
-  --ff-surface: #ffffff;
-  --ff-control: #e3e9f0;
-  --ff-hover: #d1e2f7;
-  --ff-divider: #b5becb;
-  --ff-border: #7e91a9;
-  --ff-text: #182839;
-  --ff-muted: #4e6074;
-  --ff-accent: #164c97;
-  --ff-primary: #2363b3;
-  --ff-primary-hover: #3379ce;
-  --ff-primary-text: #ffffff;
-  --ff-selected: #d0e4ff;
-}
-
-.theme-swatch[data-theme="aqua"] {
-  background: linear-gradient(90deg, #e9edf2 65%, #164c97 65%);
-}
-
 :host([data-theme="commodore64"]) {
   --ff-bg: #35308b;
   --ff-header: #272369;
@@ -2144,27 +1974,6 @@ progress::-moz-progress-bar {
 
 .theme-swatch[data-theme="commodore64"] {
   background: linear-gradient(90deg, #35308b 65%, #d2ccff 65%);
-}
-
-:host([data-theme="nes"]) {
-  --ff-bg: #d5d5d5;
-  --ff-header: #bdbdbd;
-  --ff-surface: #ededed;
-  --ff-control: #c7c7c7;
-  --ff-hover: #b5b5b5;
-  --ff-divider: #999999;
-  --ff-border: #626262;
-  --ff-text: #202020;
-  --ff-muted: #494949;
-  --ff-accent: #a51c30;
-  --ff-primary: #a51c30;
-  --ff-primary-hover: #bd2941;
-  --ff-primary-text: #ffffff;
-  --ff-selected: #e0b3ba;
-}
-
-.theme-swatch[data-theme="nes"] {
-  background: linear-gradient(90deg, #d5d5d5 65%, #a51c30 65%);
 }
 
 :host([data-theme="windows311"]) {
@@ -2188,31 +1997,8 @@ progress::-moz-progress-bar {
   background: linear-gradient(90deg, #c0c0c0 65%, #000080 65%);
 }
 
-:host([data-theme="aqua"]),
-:host([data-theme="nes"]),
 :host([data-theme="windows311"]) {
   color-scheme: light;
-}
-:host([data-theme="aqua"]) .titlebar {
-  background: linear-gradient(#f9fbfd, #d0d8e2 52%, #e8edf3);
-  border-bottom: 1px solid #9caaba;
-}
-:host([data-theme="aqua"]) .sidebar,
-:host([data-theme="aqua"]) .panel,
-:host([data-theme="aqua"]) .name-dialog {
-  border: 1px solid #8c9aad;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px #16283c45;
-}
-:host([data-theme="aqua"]) button.primary {
-  background: linear-gradient(#edf7ff, #5b9cec 48%, #2769bc 52%, #74b4f3);
-  color: #102c51;
-  border: 1px solid #3264a2;
-  border-radius: 14px;
-  text-shadow: 0 1px #ffffff80;
-}
-:host([data-theme="aqua"]) .sidebar > .titlebar > strong {
-  color: #182839;
 }
 :host([data-theme="commodore64"]) {
   --ff-font-family: "Courier New", Courier, monospace;
@@ -2232,41 +2018,6 @@ progress::-moz-progress-bar {
 }
 :host([data-theme="commodore64"]) .sidebar > .titlebar > strong {
   color: #dfdcff;
-}
-:host([data-theme="nes"]) .sidebar,
-:host([data-theme="nes"]) .panel,
-:host([data-theme="nes"]) .name-dialog {
-  border: 2px solid #414141;
-  border-radius: 3px;
-  box-shadow: 3px 3px 0 #0005;
-}
-:host([data-theme="nes"]) .titlebar {
-  background: #333;
-  border-bottom: 3px solid #a51c30;
-  color: #fff;
-}
-:host([data-theme="nes"]) .sidebar > .titlebar > strong,
-:host([data-theme="nes"]) .titlebar .comment-date,
-:host([data-theme="nes"]) .titlebar button {
-  color: #fff;
-}
-:host([data-theme="nes"])
-  .sidebar
-  > .titlebar
-  .header-view-icons
-  button[aria-pressed="true"],
-:host([data-theme="nes"])
-  .sidebar
-  > .titlebar
-  button[aria-label="Settings"][aria-expanded="true"] {
-  color: #fff;
-  background: #a51c30;
-  border-color: #f5b4bd;
-}
-:host([data-theme="nes"]) button:not(.dot),
-:host([data-theme="nes"]) textarea,
-:host([data-theme="nes"]) input {
-  border-radius: 2px;
 }
 :host([data-theme="windows311"]) .sidebar,
 :host([data-theme="windows311"]) .panel,
@@ -2307,24 +2058,6 @@ progress::-moz-progress-bar {
   border-radius: 0;
 }
 
-:host([data-theme="aqua"]) .site-total strong,
-:host([data-theme="aqua"]) .page-counts span,
-:host([data-theme="aqua"]) .reply p strong[style] {
-  color: var(--ff-accent) !important;
-}
-:host([data-theme="aqua"]) .thread .status-grid button {
-  color: var(--ff-text);
-}
-
-:host([data-theme="nes"]) .site-total strong,
-:host([data-theme="nes"]) .page-counts span,
-:host([data-theme="nes"]) .reply p strong[style] {
-  color: var(--ff-accent) !important;
-}
-:host([data-theme="nes"]) .thread .status-grid button {
-  color: var(--ff-text);
-}
-
 :host([data-theme="windows311"]) .site-total strong,
 :host([data-theme="windows311"]) .page-counts span,
 :host([data-theme="windows311"]) .reply p strong[style] {
@@ -2332,48 +2065,6 @@ progress::-moz-progress-bar {
 }
 :host([data-theme="windows311"]) .thread .status-grid button {
   color: var(--ff-text);
-}
-
-:host([data-theme="nextstep"]) {
-  --ff-bg: #aaaaaa;
-  --ff-header: #333333;
-  --ff-surface: #cccccc;
-  --ff-control: #b5b5b5;
-  --ff-hover: #c5c5c5;
-  --ff-divider: #777777;
-  --ff-border: #505050;
-  --ff-text: #111111;
-  --ff-muted: #3b3b3b;
-  --ff-accent: #222222;
-  --ff-primary: #333333;
-  --ff-primary-hover: #484848;
-  --ff-primary-text: #ffffff;
-  --ff-selected: #d0d0d0;
-}
-
-.theme-swatch[data-theme="nextstep"] {
-  background: linear-gradient(90deg, #aaaaaa 65%, #222222 65%);
-}
-
-:host([data-theme="amiga"]) {
-  --ff-bg: #c7c7c7;
-  --ff-header: #0055aa;
-  --ff-surface: #eeeeee;
-  --ff-control: #c7c7c7;
-  --ff-hover: #d8e6f6;
-  --ff-divider: #777777;
-  --ff-border: #444444;
-  --ff-text: #111111;
-  --ff-muted: #424242;
-  --ff-accent: #00458f;
-  --ff-primary: #f6a13b;
-  --ff-primary-hover: #ffbc65;
-  --ff-primary-text: #201407;
-  --ff-selected: #bad5f1;
-}
-
-.theme-swatch[data-theme="amiga"] {
-  background: linear-gradient(90deg, #c7c7c7 65%, #00458f 65%);
 }
 
 :host([data-theme="synthwave"]) {
@@ -2396,106 +2087,6 @@ progress::-moz-progress-bar {
 .theme-swatch[data-theme="synthwave"] {
   background: linear-gradient(90deg, #17132b 65%, #f39cde 65%);
 }
-
-:host([data-theme="pipboy"]) {
-  --ff-bg: #07120b;
-  --ff-header: #0c1e12;
-  --ff-surface: #102719;
-  --ff-control: #163320;
-  --ff-hover: #1d4329;
-  --ff-divider: #295536;
-  --ff-border: #4c8656;
-  --ff-text: #b6f8a6;
-  --ff-muted: #93c789;
-  --ff-accent: #a1ed81;
-  --ff-primary: #a1ed81;
-  --ff-primary-hover: #c4ffab;
-  --ff-primary-text: #10280b;
-  --ff-selected: #254b26;
-}
-
-.theme-swatch[data-theme="pipboy"] {
-  background: linear-gradient(90deg, #07120b 65%, #a1ed81 65%);
-}
-
-:host([data-theme="nextstep"]),
-:host([data-theme="amiga"]) {
-  color-scheme: light;
-}
-:host([data-theme="nextstep"]) .titlebar {
-  background: linear-gradient(#555, #222);
-  color: #fff;
-  border-bottom: 2px solid #111;
-}
-:host([data-theme="nextstep"]) .sidebar > .titlebar > strong,
-:host([data-theme="nextstep"]) .titlebar .comment-date,
-:host([data-theme="nextstep"]) .titlebar button {
-  color: #fff;
-}
-:host([data-theme="nextstep"]) .sidebar,
-:host([data-theme="nextstep"]) .panel,
-:host([data-theme="nextstep"]) .name-dialog {
-  border: 2px solid #333;
-  border-radius: 0;
-  box-shadow: 3px 3px 0 #0006;
-}
-:host([data-theme="nextstep"])
-  button:not(.dot):not(.text-link):not(.reply-trash):not(.edit-pencil):not(
-    .file-remove
-  ) {
-  border: 2px solid;
-  border-color: #eee #555 #555 #eee;
-  border-radius: 0;
-  box-shadow: none;
-}
-:host([data-theme="nextstep"])
-  .sidebar
-  > .titlebar
-  .header-view-icons
-  button[aria-pressed="true"],
-:host([data-theme="nextstep"])
-  .sidebar
-  > .titlebar
-  button[aria-label="Settings"][aria-expanded="true"] {
-  background: #777;
-  color: #fff;
-  border-color: #ccc;
-}
-:host([data-theme="amiga"]) .titlebar {
-  background: #0055aa;
-  border-bottom: 2px solid #fff;
-  color: #fff;
-}
-:host([data-theme="amiga"]) .sidebar > .titlebar > strong,
-:host([data-theme="amiga"]) .titlebar .comment-date,
-:host([data-theme="amiga"]) .titlebar button {
-  color: #fff;
-}
-:host([data-theme="amiga"]) .sidebar,
-:host([data-theme="amiga"]) .panel,
-:host([data-theme="amiga"]) .name-dialog {
-  border: 2px solid #444;
-  border-radius: 0;
-  box-shadow: 3px 3px 0 #0055aa;
-}
-:host([data-theme="amiga"]) button:not(.dot),
-:host([data-theme="amiga"]) textarea,
-:host([data-theme="amiga"]) input {
-  border-radius: 0;
-}
-:host([data-theme="amiga"])
-  .sidebar
-  > .titlebar
-  .header-view-icons
-  button[aria-pressed="true"],
-:host([data-theme="amiga"])
-  .sidebar
-  > .titlebar
-  button[aria-label="Settings"][aria-expanded="true"] {
-  background: #f6a13b;
-  color: #201407;
-  border-color: #ffce8f;
-}
 :host([data-theme="synthwave"]) .titlebar {
   background: linear-gradient(110deg, #291c44, #352249);
   border-bottom: 1px solid #b66bba;
@@ -2509,47 +2100,6 @@ progress::-moz-progress-bar {
 }
 :host([data-theme="synthwave"]) .comment-link {
   color: #7be3ef;
-}
-:host([data-theme="pipboy"]) {
-  --ff-font-family: "Courier New", Courier, monospace;
-}
-:host([data-theme="pipboy"]) .sidebar,
-:host([data-theme="pipboy"]) .panel,
-:host([data-theme="pipboy"]) .name-dialog {
-  border: 1px solid #4c8656;
-  border-radius: 3px;
-  box-shadow: 0 0 12px #60c94918;
-}
-:host([data-theme="pipboy"]) .titlebar {
-  border-bottom: 1px solid #4c8656;
-}
-:host([data-theme="pipboy"]) .sidebar > .titlebar > strong {
-  color: #a1ed81;
-}
-:host([data-theme="pipboy"]) button:not(.dot),
-:host([data-theme="pipboy"]) input,
-:host([data-theme="pipboy"]) textarea,
-:host([data-theme="pipboy"]) .reply,
-:host([data-theme="pipboy"]) .activity-card {
-  border-radius: 2px;
-}
-
-:host([data-theme="nextstep"]) .site-total strong,
-:host([data-theme="nextstep"]) .page-counts span,
-:host([data-theme="nextstep"]) .reply p strong[style] {
-  color: var(--ff-accent) !important;
-}
-:host([data-theme="nextstep"]) .thread .status-grid button {
-  color: var(--ff-text);
-}
-
-:host([data-theme="amiga"]) .site-total strong,
-:host([data-theme="amiga"]) .page-counts span,
-:host([data-theme="amiga"]) .reply p strong[style] {
-  color: var(--ff-accent) !important;
-}
-:host([data-theme="amiga"]) .thread .status-grid button {
-  color: var(--ff-text);
 }
 
 :host([data-theme="emerald"]) {
@@ -2579,27 +2129,6 @@ progress::-moz-progress-bar {
   color: #fff;
 }
 
-:host([data-theme="slate"]) {
-  --ff-bg: #232428;
-  --ff-header: #1e1f22;
-  --ff-surface: #2b2d31;
-  --ff-control: #383a40;
-  --ff-hover: #454752;
-  --ff-divider: #42454e;
-  --ff-border: #72788a;
-  --ff-text: #f2f3f5;
-  --ff-muted: #babdc6;
-  --ff-accent: #b0b7ff;
-  --ff-primary: #a2acff;
-  --ff-primary-hover: #c1c7ff;
-  --ff-primary-text: #1c2042;
-  --ff-selected: #3b3e67;
-}
-
-.theme-swatch[data-theme="slate"] {
-  background: linear-gradient(90deg, #232428 65%, #b0b7ff 65%);
-}
-
 :host([data-theme="linen"]) {
   --ff-bg: #faf9f6;
   --ff-header: #f0efeb;
@@ -2619,27 +2148,6 @@ progress::-moz-progress-bar {
 
 .theme-swatch[data-theme="linen"] {
   background: linear-gradient(90deg, #faf9f6 65%, #41403a 65%);
-}
-
-:host([data-theme="cobalt"]) {
-  --ff-bg: #17212e;
-  --ff-header: #1b2b3d;
-  --ff-surface: #213347;
-  --ff-control: #2b425b;
-  --ff-hover: #36536e;
-  --ff-divider: #3b5269;
-  --ff-border: #64849f;
-  --ff-text: #e7f1fa;
-  --ff-muted: #aec2d6;
-  --ff-accent: #88c9f1;
-  --ff-primary: #88c9f1;
-  --ff-primary-hover: #b4e0fc;
-  --ff-primary-text: #152c40;
-  --ff-selected: #2c506d;
-}
-
-.theme-swatch[data-theme="cobalt"] {
-  background: linear-gradient(90deg, #17212e 65%, #88c9f1 65%);
 }
 
 :host([data-theme="macintosh"]) {
@@ -2678,13 +2186,6 @@ progress::-moz-progress-bar {
 }
 :host([data-theme="linen"]) .sidebar > .titlebar > strong {
   color: #292824;
-}
-:host([data-theme="cobalt"]) .titlebar {
-  background: linear-gradient(#243e56, #1b2b3d);
-  border-bottom: 1px solid #3b5269;
-}
-:host([data-theme="slate"]) .sidebar > .titlebar > strong {
-  color: #f2f3f5;
 }
 :host([data-theme="macintosh"]) .sidebar,
 :host([data-theme="macintosh"]) .panel,
@@ -2743,22 +2244,7 @@ progress::-moz-progress-bar {
   color: var(--ff-text);
 }
 
-:host([data-theme="blueprint"]) {
-  --ff-bg: #102b4d;
-  --ff-header: #15365e;
-  --ff-surface: #1b426c;
-  --ff-control: #23517e;
-  --ff-hover: #2d6092;
-  --ff-divider: #456e99;
-  --ff-border: #7da4c9;
-  --ff-text: #f1f8ff;
-  --ff-muted: #bbd2e8;
-  --ff-accent: #b1e8ff;
-  --ff-primary: #b1e8ff;
-  --ff-primary-hover: #d6f3ff;
-  --ff-primary-text: #123554;
-  --ff-selected: #2c5d88;
+/* Start classic themes on a fresh row after the modern palettes. */
+.theme-choices button[data-value="windows311"] {
+  grid-column: 1;
 }
-.theme-swatch[data-theme="blueprint"] { background: linear-gradient(90deg, #102b4d 65%, #b1e8ff 65%); }
-:host([data-theme="blueprint"]) .titlebar { border-bottom: 1px solid #7da4c9; }
-:host([data-theme="blueprint"]) .sidebar > .titlebar > strong { color: #f1f8ff; }

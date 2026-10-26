@@ -1,5 +1,15 @@
 # Changelog
 
+## Streamlined theme selection
+
+Commit message: Streamline theme choices and repair retained theme styles
+
+- Reduce the combined appearance list to 11 themes: Graphite, Carbon, Emerald, Neon, Linen, Windows 3.11, Windows XP, Macintosh, Mac OS 9, Game Boy, and C64.
+- Migrate retired theme selections and legacy aliases to retained alternatives.
+- Start Windows 3.11 on a fresh row, leaving the space beside Linen empty.
+- Restore Mac OS 9 and Windows XP styles and preview colors; use a CSS parser for safe theme removal.
+- Extend preference migration tests and browser checks for every retained preview gradient.
+
 ## Sidebar polish and theme collection
 
 Commit message: Polish sidebar navigation and add classic theme collection

@@ -316,13 +316,13 @@ test("settings persist, stay isolated from the host page, and fit review navigat
   await expect(
     page.getByRole("button", { name: "Comments", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Cobalt", exact: true }).click();
+  await page.getByRole("button", { name: "Graphite", exact: true }).click();
   await page.getByRole("button", { name: "Right", exact: true }).click();
   await page.getByRole("button", { name: "Large", exact: true }).click();
   await page.getByLabel("Pause dot animations").check();
   await page.getByLabel("Hide dots", { exact: true }).check();
   const host = page.locator("[data-flakflak-root]");
-  await expect(host).toHaveAttribute("data-theme", "cobalt");
+  await expect(host).toHaveAttribute("data-theme", "graphite");
   await expect(host).toHaveAttribute("data-side", "right");
   await expect(host).toHaveAttribute("data-size", "large");
   const widgetFont = await host.evaluate(
@@ -351,7 +351,7 @@ test("settings persist, stay isolated from the host page, and fit review navigat
   await openSidebar(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Cobalt", exact: true }),
+    page.getByRole("button", { name: "Graphite", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByLabel("Pause dot animations")).toBeChecked();
   await expect(page.getByLabel("Hide dots", { exact: true })).toBeChecked();
@@ -813,7 +813,7 @@ test("new-dot dragging and keyboard movement preserve page-specific recoverable 
 
 test.describe("WordPress reference appearance", () => {
   test.use({ deviceScaleFactor: 2 });
-  test("Midnight sidebar, thread, composer and semantic dot colors match the reference components", async ({
+  test("Graphite sidebar, thread, composer and semantic dot colors match the reference components", async ({
     page,
     request,
     browserName,
@@ -863,7 +863,7 @@ test.describe("WordPress reference appearance", () => {
         localStorage.setItem(
           "flakflak:preferences:" + site,
           JSON.stringify({
-            theme: "midnight",
+            theme: "graphite",
             side: "left",
             size: "standard",
             hideDots: false,
@@ -957,25 +957,25 @@ test("new themes apply and retain readable settings", async ({ page }) => {
   await page.goto(appOrigin + "/demo.html?site=" + siteId);
   await openSidebar(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const swatches = page.locator(".theme-choices .theme-swatch");
+  await expect(swatches).toHaveCount(11);
+  const previews = await swatches.evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      theme: node.getAttribute("data-theme"),
+      image: getComputedStyle(node).backgroundImage,
+    })),
+  );
+  for (const preview of previews)
+    expect(preview.image, preview.theme || "theme preview").not.toBe("none");
   for (const [label, value] of [
     ["Carbon", "carbon"],
-    ["Cobalt", "cobalt"],
-    ["Windows 95", "windows95"],
     ["Emerald", "emerald"],
     ["Mac OS 9", "macos9"],
     ["Windows XP", "windowsxp"],
-    ["Terminal", "terminal"],
-    ["Blueprint", "blueprint"],
     ["Game Boy", "gameboy"],
-    ["Aqua", "aqua"],
     ["C64", "commodore64"],
-    ["NES", "nes"],
     ["Windows 3.11", "windows311"],
-    ["NeXTSTEP", "nextstep"],
-    ["Amiga", "amiga"],
     ["Neon", "synthwave"],
-    ["Pip-Boy", "pipboy"],
-    ["Slate", "slate"],
     ["Linen", "linen"],
     ["Macintosh", "macintosh"],
   ]) {

@@ -1,6 +1,12 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs/promises";
 import path from "node:path";
+async function openSidebar(page: Page) {
+  const launcher = page.getByRole("button", { name: "FlakFlak · Feedback" });
+  await expect(launcher).toHaveAttribute("aria-expanded", /true|false/);
+  if ((await launcher.getAttribute("aria-expanded")) !== "true")
+    await launcher.click();
+}
 const root = process.cwd();
 const apiOrigin = "http://api-flakflak.localhost",
   appOrigin = "http://app-flakflak.localhost",
@@ -120,13 +126,22 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   ).toBeVisible();
   await page
     .getByRole("textbox", { name: "Reply", exact: true })
-    .fill("This is a browser-tested reply");
+    .fill("This is a browser-tested reply http://reddit.com?f=222&a=2");
   await page
     .getByRole("textbox", { name: "Reply", exact: true })
     .press("Control+Enter");
   await expect(
-    page.getByText("This is a browser-tested reply", { exact: true }),
+    page.getByText(
+      "This is a browser-tested reply http://reddit.com?f=222&a=2",
+      { exact: true },
+    ),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", {
+      name: "http://reddit.com?f=222&a=2",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "http://reddit.com/?f=222&a=2");
   await page.getByRole("button", { name: "Review", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Review", exact: true }),
@@ -164,7 +179,7 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
     page.getByRole("button", { name: "Closed", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await page.reload();
-  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(page);
   await expect(page.getByText("100% finished")).toBeVisible();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Show closed comments").check();
@@ -246,7 +261,7 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   await expect(
     other.getByRole("button", { name: "FlakFlak · Feedback" }),
   ).toBeVisible();
-  await other.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(other);
   await expect(other.getByText("1 active")).toHaveCount(0);
   await expect(other.getByText("100% finished")).toBeVisible();
   expect(errors).toEqual([]);
@@ -300,14 +315,14 @@ test("settings persist, stay isolated from the host page, and fit review navigat
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Comments", exact: true }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Pink", exact: true }).click();
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cobalt", exact: true }).click();
   await page.getByRole("button", { name: "Right", exact: true }).click();
   await page.getByRole("button", { name: "Large", exact: true }).click();
   await page.getByLabel("Pause dot animations").check();
   await page.getByLabel("Hide dots", { exact: true }).check();
   const host = page.locator("[data-flakflak-root]");
-  await expect(host).toHaveAttribute("data-theme", "pink");
+  await expect(host).toHaveAttribute("data-theme", "cobalt");
   await expect(host).toHaveAttribute("data-side", "right");
   await expect(host).toHaveAttribute("data-size", "large");
   const widgetFont = await host.evaluate(
@@ -333,10 +348,10 @@ test("settings persist, stay isolated from the host page, and fit review navigat
     page.getByRole("button", { name: /Open comment #/ }),
   ).toHaveCount(0);
   await page.reload();
-  await launcher.click();
+  await openSidebar(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Pink", exact: true }),
+    page.getByRole("button", { name: "Cobalt", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByLabel("Pause dot animations")).toBeChecked();
   await expect(page.getByLabel("Hide dots", { exact: true })).toBeChecked();
@@ -347,7 +362,7 @@ test("settings persist, stay isolated from the host page, and fit review navigat
     page.getByRole("button", { name: "Expand all", exact: true }),
   ).toBeVisible();
   await page.reload();
-  await launcher.click();
+  await openSidebar(page);
   await expect(
     page.getByRole("button", { name: "Expand all", exact: true }),
   ).toBeVisible();
@@ -487,7 +502,7 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   if (await page.getByRole("button", { name: "Dismiss", exact: true }).count())
     await page.getByRole("button", { name: "Dismiss", exact: true }).click();
   const originalAnchor = (await detail()).comment.anchor;
-  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(page);
   await dialog.getByRole("button", { name: "Details", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Reattach target", exact: true })
@@ -553,9 +568,13 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   await expect(
     dialog.getByText("Pagination reply 1", { exact: true }),
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Hide earlier replies", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Hide earlier replies", exact: true })
+    .click();
   await expect(dialog.locator(".reply")).toHaveCount(2);
-  await dialog.getByRole("button", { name: "Show earlier replies (3)", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Show earlier replies (3)", exact: true })
+    .click();
   await expect(dialog.locator(".reply")).toHaveCount(5);
   await dialog
     .locator(".reply")
@@ -632,10 +651,15 @@ test("unread activity is preserved until a thread is opened, survives reload, an
     { site: siteId, person: reader },
   );
   await page.goto(appOrigin + "/demo.html?site=" + siteId);
-  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(page);
   await expect(
     page.getByRole("button", { name: "Unread · 1", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+  await expect(page.locator("flakflak-widget details[open]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Unread · 1", exact: true }).click();
+  await expect(page.locator("flakflak-widget details[open]")).toHaveCount(1);
+  await page.getByRole("button", { name: "Unread · 1", exact: true }).click();
   await page.getByRole("button", { name: "Activity", exact: true }).click();
   await page.getByRole("button", { name: "Unread only", exact: true }).click();
   await expect(
@@ -667,7 +691,7 @@ test("unread activity is preserved until a thread is opened, survives reload, an
     .press("Control+Enter");
   await expect(dialog.getByText("My own reply", { exact: true })).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(page);
   await expect(
     page.getByRole("button", { name: "Unread · 0", exact: true }),
   ).toBeVisible();
@@ -749,7 +773,7 @@ test("new-dot dragging and keyboard movement preserve page-specific recoverable 
     .getByRole("button", { name: "Close", exact: true })
     .click();
   await page.reload();
-  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(page);
   await page
     .getByRole("button", { name: "Resume new comment draft", exact: true })
     .click();
@@ -767,12 +791,12 @@ test("new-dot dragging and keyboard movement preserve page-specific recoverable 
     .getByRole("button", { name: "Close", exact: true })
     .click();
   await page.goto(url + "&variant=second");
-  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(page);
   await expect(
     page.getByRole("button", { name: "Resume new comment draft", exact: true }),
   ).toHaveCount(0);
   await page.goto(url);
-  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await openSidebar(page);
   await page
     .getByRole("button", { name: "Resume new comment draft", exact: true })
     .click();
@@ -857,11 +881,9 @@ test.describe("WordPress reference appearance", () => {
     });
     await expect(dot).toBeVisible();
     expect(
-      await dot.evaluate(
-        (node) => getComputedStyle(node, "::after").backgroundColor,
-      ),
+      await dot.evaluate((node) => getComputedStyle(node).backgroundColor),
     ).toBe("rgb(255, 87, 51)");
-    await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+    await openSidebar(page);
     await expect(
       page.getByRole("button", { name: "Unread · 0", exact: true }),
     ).toBeVisible();
@@ -911,4 +933,68 @@ test.describe("WordPress reference appearance", () => {
       path: "/private/tmp/flakflak-composer-" + browserName + ".png",
     });
   });
+});
+
+test("sidebar open and closed state survives reload and navigation", async ({
+  page,
+}) => {
+  const url = appOrigin + "/demo.html?site=" + siteId;
+  await page.goto(url);
+  const launcher = page.getByRole("button", { name: "FlakFlak · Feedback" });
+  await expect(launcher).toHaveAttribute("aria-expanded", "false");
+  await launcher.click();
+  await expect(launcher).toHaveAttribute("aria-expanded", "true");
+  await page.reload();
+  await expect(launcher).toHaveAttribute("aria-expanded", "true");
+  await page.goto(url + "&variant=another");
+  await expect(launcher).toHaveAttribute("aria-expanded", "true");
+  await launcher.click();
+  await page.reload();
+  await expect(launcher).toHaveAttribute("aria-expanded", "false");
+});
+
+test("new themes apply and retain readable settings", async ({ page }) => {
+  await page.goto(appOrigin + "/demo.html?site=" + siteId);
+  await openSidebar(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  for (const [label, value] of [
+    ["Carbon", "carbon"],
+    ["Cobalt", "cobalt"],
+    ["Windows 95", "windows95"],
+    ["Emerald", "emerald"],
+    ["Mac OS 9", "macos9"],
+    ["Windows XP", "windowsxp"],
+    ["Terminal", "terminal"],
+    ["Blueprint", "blueprint"],
+    ["Game Boy", "gameboy"],
+    ["Aqua", "aqua"],
+    ["C64", "commodore64"],
+    ["NES", "nes"],
+    ["Windows 3.11", "windows311"],
+    ["NeXTSTEP", "nextstep"],
+    ["Amiga", "amiga"],
+    ["Neon", "synthwave"],
+    ["Pip-Boy", "pipboy"],
+    ["Slate", "slate"],
+    ["Linen", "linen"],
+    ["Macintosh", "macintosh"],
+  ]) {
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await expect(page.locator("[data-flakflak-root]")).toHaveAttribute(
+      "data-theme",
+      value,
+    );
+    const buttons = page.locator(".sidebar > .titlebar button");
+    await expect(buttons).toHaveCount(4);
+    const sizes = await buttons.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        return [box.width, box.height, box.y];
+      }),
+    );
+    expect(new Set(sizes.map((size) => JSON.stringify(size))).size).toBe(1);
+    await page.screenshot({
+      path: "/private/tmp/flakflak-theme-" + value + ".png",
+    });
+  }
 });

@@ -44,7 +44,7 @@ function start(siteId: string, base: string) {
     "pointer-events": "none",
     "z-index": "2147483646",
     "font-family":
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      'var(--ff-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif)',
     "font-size": "var(--ff-font-size, 14px)",
     "font-weight": "400",
     "line-height": "1.5",
@@ -132,7 +132,8 @@ function start(siteId: string, base: string) {
   )
     guest = null;
   let activeAnchor: Anchor | null = null,
-    sidebarOpen = false,
+    sidebarOpen =
+      readStored<boolean>("flakflak:sidebar-open:" + siteId, false) === true,
     armed = false,
     busy = false,
     revision = 0,
@@ -214,8 +215,7 @@ function start(siteId: string, base: string) {
   const launch = button(
     "FlakFlak · Feedback",
     () => {
-      sidebarOpen = !sidebarOpen;
-      renderSidebar();
+      setSidebarOpen(!sidebarOpen);
     },
     "launcher",
   );
@@ -1034,7 +1034,9 @@ function start(siteId: string, base: string) {
       author.append(pencil);
     }
     panel.insertBefore(details, navigation);
-    body.append(author, el("p", c.body, "comment-text"));
+    const commentText = historyText(c.body, false);
+    commentText.classList.add("comment-text");
+    body.append(author, commentText);
     if (resolveAnchor(c.anchor).missing)
       body.append(
         el(
@@ -1102,7 +1104,7 @@ function start(siteId: string, base: string) {
         if (guest?.id === reply.participant_id && reply.kind === "reply")
           replyMeta.append(
             button(
-              "🗑",
+              "×",
               () =>
                 perform(async () => {
                   if (!confirm("Delete this reply?")) return;
@@ -1471,6 +1473,11 @@ function start(siteId: string, base: string) {
     shadow.append(g);
     render();
   }
+  function setSidebarOpen(open: boolean) {
+    sidebarOpen = open;
+    store("flakflak:sidebar-open:" + siteId, open);
+    renderSidebar();
+  }
   function renderSidebar() {
     sidebar.classList.toggle("hide", !sidebarOpen);
     host.dataset.sidebarOpen = String(sidebarOpen);
@@ -1485,8 +1492,7 @@ function start(siteId: string, base: string) {
     launch.setAttribute("aria-expanded", String(sidebarOpen));
     if (!sidebarOpen) return;
     const header = titlebar("FlakFlak", () => {
-      sidebarOpen = false;
-      renderSidebar();
+      setSidebarOpen(false);
     });
     const gear = button("⚙", () => {
       if (view === "settings") view = previousView;
@@ -1496,6 +1502,15 @@ function start(siteId: string, base: string) {
       }
       renderSidebar();
     });
+    const headerIcon = (paths: string) =>
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      paths +
+      "</svg>";
+    gear.innerHTML = headerIcon(
+      '<path d="m9.5 3-.6 2.1-1.6.9-2.1-.5-2 3.5 1.5 1.6v1.8L3.2 14l2 3.5 2.1-.5 1.6.9.6 2.1h4l.6-2.1 1.6-.9 2.1.5 2-3.5-1.5-1.6v-1.8l1.5-1.6-2-3.5-2.1.5-1.6-.9L13.5 3Z"/><circle cx="11.5" cy="11.5" r="3"/>',
+    );
+    const closeButton = header.lastElementChild as HTMLButtonElement;
+    closeButton.innerHTML = headerIcon('<path d="m6 6 12 12M18 6 6 18"/>');
     gear.title = "Settings";
     gear.setAttribute("aria-label", "Settings");
     gear.setAttribute("aria-expanded", String(view === "settings"));
@@ -1503,7 +1518,7 @@ function start(siteId: string, base: string) {
     header.insertBefore(gear, header.lastElementChild);
     sidebar.replaceChildren(header);
     const body = el("div", "", "body sidebar-scroll"),
-      tabs = el("div", "", "toolbar view-tabs");
+      tabs = el("div", "", "header-view-icons");
     for (const v of ["comments", "activity"] as const) {
       const b = button(v[0].toUpperCase() + v.slice(1), async () => {
         view = v;
@@ -1511,14 +1526,23 @@ function start(siteId: string, base: string) {
         else await load();
         renderSidebar();
       });
+      const label = v[0].toUpperCase() + v.slice(1);
+      b.setAttribute("aria-label", label);
+      b.title = label;
+      b.innerHTML =
+        v === "comments"
+          ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3Z"/><path d="M7 8h9M7 12h6"/></svg>'
+          : '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>';
       b.setAttribute("aria-pressed", String(view === v));
       tabs.append(b);
     }
-    if (view !== "settings") body.append(tabs);
+    header.insertBefore(tabs, gear);
+    sidebar.append(
+      el("h2", view[0].toUpperCase() + view.slice(1), "sidebar-view-title"),
+    );
     if (view === "settings") {
       body.id = "ff-settings";
       body.append(
-        el("strong", "Settings"),
         el(
           "p",
           guest ? "Reviewing as " + guest.name : "No name entered yet.",
@@ -1568,7 +1592,28 @@ function start(siteId: string, base: string) {
         "Appearance",
         "theme",
         themes.map((theme) => ({
-          label: theme[0].toUpperCase() + theme.slice(1),
+          label:
+            theme === "windows95"
+              ? "Windows 95"
+              : theme === "macos9"
+                ? "Mac OS 9"
+                : theme === "windowsxp"
+                  ? "Windows XP"
+                  : theme === "gameboy"
+                    ? "Game Boy"
+                    : theme === "windows311"
+                      ? "Windows 3.11"
+                      : theme === "commodore64"
+                        ? "C64"
+                        : theme === "nes"
+                          ? "NES"
+                          : theme === "nextstep"
+                            ? "NeXTSTEP"
+                            : theme === "pipboy"
+                              ? "Pip-Boy"
+                              : theme === "synthwave"
+                                ? "Neon"
+                                : theme[0].toUpperCase() + theme.slice(1),
           value: theme,
         })),
       );
@@ -1625,9 +1670,6 @@ function start(siteId: string, base: string) {
       return;
     }
     if (view === "activity") {
-      const tabHeader = el("div", "", "sidebar-tabs");
-      tabHeader.append(tabs);
-      sidebar.append(tabHeader);
       const controls = el("div", "", "toolbar");
       const activityFilter = button("Unread only", async () => {
         activityUnreadOnly = !activityUnreadOnly;
@@ -1792,6 +1834,19 @@ function start(siteId: string, base: string) {
       unreadCount = comments.filter(isUnread).length;
     const filter = button("Unread · " + unreadCount, () => {
       unreadOnly = !unreadOnly;
+      if (unreadOnly) {
+        for (const status of statuses) {
+          store(
+            "flakflak:group:" +
+              siteId +
+              ":" +
+              pageIdentity(location.href) +
+              ":" +
+              status,
+            true,
+          );
+        }
+      }
       renderSidebar();
     });
     filter.setAttribute("aria-pressed", String(unreadOnly));
@@ -1883,7 +1938,6 @@ function start(siteId: string, base: string) {
     groupToggle.classList.add("group-toggle");
     const localHeader = el("div", "", "sidebar-page-header");
     localHeader.append(
-      tabs,
       pageLabel,
       pageTitle,
       pageTotal,
@@ -1948,8 +2002,11 @@ function start(siteId: string, base: string) {
             el("span", c.body),
           );
           if (isUnread(c)) {
-            const badge = el("span", "Unread", "unread-badge");
-            b.append(badge);
+            const badge = el("span", "", "unread-dot");
+            badge.setAttribute("role", "img");
+            badge.setAttribute("aria-label", "Unread");
+            badge.title = "Unread";
+            b.querySelector("strong")?.append(badge);
           }
           details.append(b);
         }
@@ -2165,19 +2222,49 @@ function start(siteId: string, base: string) {
     activityMore = data.more;
   }
 
+  function appendLinkedText(parent: HTMLElement, text: string) {
+    const urls = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+    let cursor = 0;
+    for (const match of text.matchAll(urls)) {
+      const start = match.index!;
+      let url = match[0].replace(/[.,!?;:]+$/, "");
+      while (
+        url.endsWith(")") &&
+        (url.match(/\)/g)?.length || 0) > (url.match(/\(/g)?.length || 0)
+      )
+        url = url.slice(0, -1);
+      parent.append(document.createTextNode(text.slice(cursor, start)));
+      try {
+        const parsed = new URL(url.startsWith("www.") ? "https://" + url : url);
+        if (!["http:", "https:"].includes(parsed.protocol))
+          throw new Error("Unsupported URL");
+        const link = el("a", url, "comment-link");
+        link.href = parsed.href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        parent.append(link);
+      } catch {
+        parent.append(document.createTextNode(url));
+      }
+      parent.append(document.createTextNode(match[0].slice(url.length)));
+      cursor = start + match[0].length;
+    }
+    parent.append(document.createTextNode(text.slice(cursor)));
+  }
   function historyText(text: string, statusHistory: boolean) {
     const p = el("p");
     const match = statusHistory
       ? text.match(/^Status updated to (open|review|content|closed)([\s\S]*)$/)
       : null;
     if (!match) {
-      p.textContent = text;
+      appendLinkedText(p, text);
       return p;
     }
     p.append(document.createTextNode("Status updated to "));
     const strong = el("strong", match[1]);
     strong.style.color = colors[match[1] as Status];
-    p.append(strong, document.createTextNode(match[2]));
+    p.append(strong);
+    appendLinkedText(p, match[2]);
     return p;
   }
   async function startReattach(original: Thread) {
@@ -2444,8 +2531,7 @@ function start(siteId: string, base: string) {
   document.addEventListener("keyup", (e) => {
     if (e.key === "Control") {
       if (controlOnly) {
-        sidebarOpen = !sidebarOpen;
-        renderSidebar();
+        setSidebarOpen(!sidebarOpen);
       }
       controlOnly = false;
     }

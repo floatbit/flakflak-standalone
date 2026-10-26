@@ -6,7 +6,7 @@ test('preferences accept only supported themes, sizes, sides and boolean control
  const defaults={theme:'graphite',side:'left',size:'standard',pauseAnimations:false,hideDots:false};
  assert.deepEqual(preferences(null),defaults);assert.deepEqual(preferences({theme:'unknown',side:'bottom',size:'huge',pauseAnimations:'true',hideDots:1}),defaults);
  for(const theme of themes)assert.equal(preferences({theme}).theme,theme);
- assert.deepEqual(preferences({theme:'pink',side:'right',size:'large',pauseAnimations:true,hideDots:true}),{theme:'pink',side:'right',size:'large',pauseAnimations:true,hideDots:true});
+ assert.deepEqual(preferences({theme:'cobalt',side:'right',size:'large',pauseAnimations:true,hideDots:true}),{theme:'cobalt',side:'right',size:'large',pauseAnimations:true,hideDots:true});
 });
 test('panels reserve space beside both sidebar positions when it fits',()=>{
  const viewport={width:1280,height:900},panel={width:400,height:700};

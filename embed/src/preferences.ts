@@ -1,10 +1,26 @@
 export const themes = [
   "graphite",
+  "carbon",
   "midnight",
-  "forest",
-  "violet",
-  "pink",
-  "orange",
+  "slate",
+  "cobalt",
+  "emerald",
+  "synthwave",
+  "linen",
+  "windows311",
+  "windows95",
+  "windowsxp",
+  "macintosh",
+  "macos9",
+  "aqua",
+  "nextstep",
+  "amiga",
+  "gameboy",
+  "nes",
+  "commodore64",
+  "pipboy",
+  "terminal",
+  "blueprint",
 ] as const;
 export type Theme = (typeof themes)[number];
 export interface Preferences {
@@ -19,8 +35,21 @@ export function preferences(value: unknown): Preferences {
     value && typeof value === "object"
       ? (value as Record<string, unknown>)
       : {};
+  const aliases: Record<string, Theme> = {
+    blurple: "slate",
+    paper: "linen",
+    harbor: "cobalt",
+    spotify: "emerald",
+  };
+  if (typeof v.theme === "string" && aliases[v.theme])
+    v.theme = aliases[v.theme];
   return {
-    theme: themes.includes(v.theme as Theme) ? (v.theme as Theme) : "graphite",
+    theme:
+      v.theme === "spotify"
+        ? "emerald"
+        : themes.includes(v.theme as Theme)
+          ? (v.theme as Theme)
+          : "graphite",
     side: v.side === "right" ? "right" : "left",
     size: v.size === "large" ? "large" : "standard",
     pauseAnimations: v.pauseAnimations === true,

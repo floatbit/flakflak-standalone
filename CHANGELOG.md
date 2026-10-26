@@ -1,5 +1,17 @@
 # Changelog
 
+## Sidebar polish and theme collection
+
+Commit message: Polish sidebar navigation and add classic theme collection
+
+- Add 22 ordered themes, including modern dark palettes and classic product-inspired designs; preserve renamed theme selections and complete the two-column grid.
+- Unify sidebar SVG icons, button dimensions, hover/selected treatments, and left-aligned view titles; move Comments and Activity beside Settings.
+- Remember sidebar open/closed choices per site across reloads and navigation; expand status groups when enabling the Unread filter.
+- Replace comment unread labels with a blue dot beside the author.
+- Link URLs in comments, replies, and resolution notes while preserving query parameters.
+- Increase reply fields to a 116px minimum and replace reply trash emoji with an X and edit-style hover background.
+- Extend browser coverage for sidebar persistence, unread expansion, URL linking, theme switching, and consistent header geometry.
+
 ## 0.2.0 — Standalone widget parity
 
 Commit message: Port review workflows and refine standalone widget UI

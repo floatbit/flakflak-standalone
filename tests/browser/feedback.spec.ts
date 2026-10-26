@@ -18,7 +18,24 @@ test.beforeAll(async ({ request }) => {
   expect(res.ok()).toBeTruthy();
   siteId = (await res.json()).id;
 });
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, request, context, browserName }) => {
+  if (browserName === "chromium")
+    for (const origin of [appOrigin, embedOrigin])
+      await context.grantPermissions(["local-network-access"], { origin });
+  if (process.env.FLAKFLAK_DEBUG_NETWORK === "1") {
+    page.on("requestfailed", (request) =>
+      console.log("NETWORK", request.url(), request.failure()?.errorText),
+    );
+    page.on("console", (message) => {
+      if (message.type() === "error") console.log("BROWSER", message.text());
+    });
+  }
+  const setup = await request.post(backend + "/api/v1/sites", {
+    headers: { Origin: appOrigin, Authorization: "Bearer " + key },
+    data: { name: "Browser test workspace", origins: [appOrigin, embedOrigin] },
+  });
+  expect(setup.ok()).toBeTruthy();
+  siteId = (await setup.json()).id;
   await page.route(
     /^http:\/\/(api|app|embed)-flakflak\.localhost\//,
     async (route) => {
@@ -42,7 +59,17 @@ test.beforeEach(async ({ page }) => {
         return;
       }
       try {
-        const body = await fs.readFile(file);
+        let body = await fs.readFile(file);
+        // Native browser requests preserve multipart bytes in WebKit; interception does not.
+        if (url.origin === embedOrigin && url.pathname === "/widget.js")
+          body = Buffer.concat([
+            Buffer.from(
+              "document.currentScript.dataset.apiUrl=" +
+                JSON.stringify(backend + "/api/v1") +
+                ";",
+            ),
+            body,
+          ]);
         const ext = path.extname(file);
         await route.fulfill({
           body,
@@ -141,7 +168,7 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   await expect(page.getByText("100% finished")).toBeVisible();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Show closed comments").check();
-  await page.getByRole("button", { name: "Comments", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
     .getByRole("button", { name: "Check the introductory paragraph" })
     .click();
@@ -195,7 +222,17 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
       );
       try {
         await route.fulfill({
-          body: await fs.readFile(file),
+          body:
+            url.pathname === "/widget.js"
+              ? Buffer.concat([
+                  Buffer.from(
+                    "document.currentScript.dataset.apiUrl=" +
+                      JSON.stringify(backend + "/api/v1") +
+                      ";",
+                  ),
+                  await fs.readFile(file),
+                ])
+              : await fs.readFile(file),
           contentType: url.pathname.endsWith(".js")
             ? "application/javascript"
             : "text/html",
@@ -213,4 +250,665 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   await expect(other.getByText("1 active")).toHaveCount(0);
   await expect(other.getByText("100% finished")).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test("settings persist, stay isolated from the host page, and fit review navigation beside either sidebar", async ({
+  page,
+  request,
+}) => {
+  const origin = { Origin: appOrigin };
+  const guestResponse = await request.post(
+    backend + "/api/v1/sites/" + siteId + "/guests",
+    { headers: origin, data: { name: "Settings tester" } },
+  );
+  expect(guestResponse.status()).toBe(201);
+  const person = await guestResponse.json();
+  for (const [index, status] of ["open", "content"].entries()) {
+    const result = await request.post(
+      backend + "/api/v1/sites/" + siteId + "/comments",
+      {
+        headers: { ...origin, Authorization: "Bearer " + person.token },
+        data: {
+          url: appOrigin + "/demo.html?site=" + siteId,
+          title: "Settings demo",
+          body: "Settings navigation " + index,
+          status,
+          client_id: crypto.randomUUID(),
+          anchor: {
+            selector: "#intro p",
+            text: "Mark this text, leave a reply, or attach a screenshot.",
+            x: 0.5,
+            y: 0.5,
+            documentX: 600,
+            documentY: 550,
+            viewportWidth: 1280,
+          },
+        },
+      },
+    );
+    expect(
+      result.status(),
+      (await result.json()).message || "Comment fixture should be created",
+    ).toBe(201);
+  }
+  await page.goto(appOrigin + "/demo.html?site=" + siteId);
+  const originalFont = await page
+    .locator("#intro p")
+    .evaluate((node) => getComputedStyle(node).fontFamily);
+  const launcher = page.getByRole("button", { name: "FlakFlak · Feedback" });
+  await launcher.click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Comments", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Pink", exact: true }).click();
+  await page.getByRole("button", { name: "Right", exact: true }).click();
+  await page.getByRole("button", { name: "Large", exact: true }).click();
+  await page.getByLabel("Pause dot animations").check();
+  await page.getByLabel("Hide dots", { exact: true }).check();
+  const host = page.locator("[data-flakflak-root]");
+  await expect(host).toHaveAttribute("data-theme", "pink");
+  await expect(host).toHaveAttribute("data-side", "right");
+  await expect(host).toHaveAttribute("data-size", "large");
+  const widgetFont = await host.evaluate(
+    (node) => getComputedStyle(node).fontFamily,
+  );
+  const intrusive = await page.addStyleTag({
+    content:
+      "* { font-family: serif !important; font-weight: 900 !important; }",
+  });
+  expect(await host.evaluate((node) => getComputedStyle(node).fontFamily)).toBe(
+    widgetFont,
+  );
+  expect(await host.evaluate((node) => getComputedStyle(node).fontWeight)).toBe(
+    "400",
+  );
+  await intrusive.evaluate((node) => node.remove());
+  expect(
+    await page
+      .locator("#intro p")
+      .evaluate((node) => getComputedStyle(node).fontFamily),
+  ).toBe(originalFont);
+  await expect(
+    page.getByRole("button", { name: /Open comment #/ }),
+  ).toHaveCount(0);
+  await page.reload();
+  await launcher.click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Pink", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Pause dot animations")).toBeChecked();
+  await expect(page.getByLabel("Hide dots", { exact: true })).toBeChecked();
+  await page.screenshot({ path: "/private/tmp/flakflak-settings-desktop.png" });
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Expand all", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await launcher.click();
+  await expect(
+    page.getByRole("button", { name: "Expand all", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Expand all", exact: true }).click();
+  await page.getByRole("button", { name: /Settings navigation 0/ }).click();
+  const nav = page.getByRole("navigation", { name: "Review navigation" });
+  await expect(nav.getByText("1 of 2")).toBeVisible();
+  await nav.getByRole("button", { name: "Next →", exact: true }).click();
+  await expect(nav.getByText("2 of 2")).toBeVisible();
+  const panel = await page
+      .getByRole("dialog", { name: "Comment", exact: true })
+      .boundingBox(),
+    sidebar = await page
+      .getByRole("complementary", { name: "FlakFlak sidebar" })
+      .boundingBox();
+  expect(panel!.x + panel!.width).toBeLessThanOrEqual(sidebar!.x - 12);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Left", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const leftPanel = await page
+      .getByRole("dialog", { name: "Comment", exact: true })
+      .boundingBox(),
+    leftSidebar = await page
+      .getByRole("complementary", { name: "FlakFlak sidebar" })
+      .boundingBox();
+  expect(leftPanel!.x).toBeGreaterThanOrEqual(
+    leftSidebar!.x + leftSidebar!.width + 12,
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByRole("dialog", { name: "Comment", exact: true })
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.screenshot({ path: "/private/tmp/flakflak-settings-mobile.png" });
+});
+
+test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-upload retries", async ({
+  page,
+  request,
+  browserName,
+}) => {
+  const url = appOrigin + "/demo.html?site=" + siteId;
+  await page.goto(url);
+  await expect(
+    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+  ).toBeVisible();
+  await page
+    .locator("#intro p")
+    .click({ modifiers: ["Shift"], position: { x: 100, y: 10 } });
+  await page
+    .getByRole("textbox", { name: "Your name", exact: true })
+    .fill("Port tester");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Comment", exact: true })
+    .fill("Interaction parity thread");
+  await page
+    .getByRole("textbox", { name: "Comment", exact: true })
+    .press("Meta+Enter");
+  const dialog = page.getByRole("dialog", { name: "Comment", exact: true });
+  await expect(
+    dialog.getByRole("button", { name: "Reply", exact: true }),
+  ).toBeEnabled();
+  const id = Number(
+    (await dialog.locator(".titlebar strong").innerText()).match(/#(\d+)/)![1],
+  );
+  const identity = await page.evaluate(
+    (id) => JSON.parse(localStorage.getItem("flakflak:guest:" + id)!),
+    siteId,
+  );
+  const headers = {
+    Origin: appOrigin,
+    Authorization: "Bearer " + identity.token,
+  };
+  const path = "/api/v1/sites/" + siteId + "/comments/" + id;
+  const detail = async () =>
+    (await request.get(backend + path, { headers })).json();
+  await dialog.getByRole("button", { name: "Details", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Edit comment", exact: true })
+    .click();
+  await dialog
+    .getByRole("textbox", { name: "Edit comment", exact: true })
+    .fill("Edited interaction thread");
+  await dialog
+    .getByRole("textbox", { name: "Edit comment", exact: true })
+    .press("Meta+Enter");
+  await expect(
+    dialog.getByText("Edited interaction thread", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Reply", exact: true }),
+  ).toBeEnabled();
+  let loseFirstResponse = true;
+  await page.route("**/comments/*/attachments*", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    if (browserName === "webkit") {
+      if (loseFirstResponse) {
+        loseFirstResponse = false;
+        await route.abort("failed");
+        return;
+      }
+      await route.continue();
+      return;
+    }
+    const original = new URL(route.request().url());
+    const response = await route.fetch({
+      url: backend + original.pathname + original.search,
+      headers: { ...route.request().headers(), host: original.host },
+    });
+    if (loseFirstResponse) {
+      loseFirstResponse = false;
+      await route.abort("failed");
+      return;
+    }
+    await route.fulfill({ response });
+  });
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6x8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  await dialog
+    .getByLabel("Add attachments")
+    .setInputFiles({ name: "retry.png", mimeType: "image/png", buffer: png });
+  await expect(
+    dialog.getByRole("button", { name: "Retry upload", exact: true }),
+  ).toBeEnabled();
+  await dialog
+    .getByRole("button", { name: "Retry upload", exact: true })
+    .click();
+  await expect(dialog.getByRole("img", { name: "retry.png" })).toBeVisible();
+  expect((await detail()).attachments).toHaveLength(1);
+  if (await page.getByRole("button", { name: "Dismiss", exact: true }).count())
+    await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+  const originalAnchor = (await detail()).comment.anchor;
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await dialog.getByRole("button", { name: "Details", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Reattach target", exact: true })
+    .click();
+  await expect(
+    page.getByRole("complementary", { name: "FlakFlak sidebar" }),
+  ).toBeHidden();
+  await page.locator("#two p").click();
+  await expect(
+    page.getByRole("button", { name: "Confirm placement", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  expect((await detail()).comment.anchor).toEqual(originalAnchor);
+  await dialog.getByRole("button", { name: "Details", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Reattach target", exact: true })
+    .click();
+  await page.locator("#two p").click();
+  await page
+    .getByRole("button", { name: "Confirm placement", exact: true })
+    .click();
+  await expect(dialog).toBeVisible();
+  await expect
+    .poll(async () => (await detail()).comment.anchor.selector)
+    .toBe("#two > p");
+  await expect(
+    dialog.getByRole("button", { name: "Reply", exact: true }),
+  ).toBeEnabled();
+  const dot = page.getByRole("button", {
+    name: new RegExp("Open comment #" + id + " · open"),
+  });
+  const point = await dot.boundingBox(),
+    target = await page.locator("#one p").boundingBox();
+  await page.keyboard.down("Alt");
+  await page.mouse.move(
+    point!.x + point!.width / 2,
+    point!.y + point!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(target!.x + 50, target!.y + 10, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await expect
+    .poll(async () => (await detail()).comment.anchor.selector)
+    .toBe("#one > p");
+  for (let i = 1; i <= 5; i++) {
+    const response = await request.post(backend + path + "/replies", {
+      headers,
+      data: { body: "Pagination reply " + i, client_id: crypto.randomUUID() },
+    });
+    expect(response.ok()).toBeTruthy();
+  }
+  await dialog.getByRole("button", { name: "Details", exact: true }).click();
+  await dialog.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(dialog.getByText("5 replies", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText("Pagination reply 1", { exact: true }),
+  ).toHaveCount(0);
+  await dialog
+    .getByRole("button", { name: "Show earlier replies (3)", exact: true })
+    .click();
+  await expect(
+    dialog.getByText("Pagination reply 1", { exact: true }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Hide earlier replies", exact: true }).click();
+  await expect(dialog.locator(".reply")).toHaveCount(2);
+  await dialog.getByRole("button", { name: "Show earlier replies (3)", exact: true }).click();
+  await expect(dialog.locator(".reply")).toHaveCount(5);
+  await dialog
+    .locator(".reply")
+    .filter({ has: page.getByText("Pagination reply 1", { exact: true }) })
+    .hover();
+  page.once("dialog", (d) => d.accept());
+  await dialog
+    .locator(".reply")
+    .filter({ has: page.getByText("Pagination reply 1", { exact: true }) })
+    .getByRole("button", { name: "Delete reply", exact: true })
+    .click();
+  await expect.poll(async () => (await detail()).reply_count).toBe(4);
+  await expect(
+    dialog.getByRole("button", { name: "Remove file", exact: true }),
+  ).toBeEnabled();
+  await dialog.locator(".files .file").first().hover();
+  await dialog
+    .getByRole("button", { name: "Remove file", exact: true })
+    .click();
+  await expect.poll(async () => (await detail()).attachments.length).toBe(0);
+  await expect(
+    dialog.getByRole("button", { name: "Reply", exact: true }),
+  ).toBeEnabled();
+  await dialog.getByRole("button", { name: "Details", exact: true }).click();
+  page.once("dialog", (d) => d.accept());
+  await dialog
+    .getByRole("button", { name: "Delete comment", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  expect((await request.get(backend + path, { headers })).status()).toBe(404);
+});
+
+test("unread activity is preserved until a thread is opened, survives reload, and excludes own replies", async ({
+  page,
+  request,
+}) => {
+  const origin = { Origin: appOrigin },
+    prefix = "/api/v1/sites/" + siteId;
+  const createGuest = async (name: string) =>
+    (
+      await request.post(backend + prefix + "/guests", {
+        headers: origin,
+        data: { name },
+      })
+    ).json();
+  const author = await createGuest("Author"),
+    reader = await createGuest("Reader");
+  const auth = { ...origin, Authorization: "Bearer " + author.token },
+    reading = { ...origin, Authorization: "Bearer " + reader.token };
+  const created = await request.post(backend + prefix + "/comments", {
+    headers: auth,
+    data: {
+      url: appOrigin + "/demo.html?site=" + siteId,
+      title: "Unread demo",
+      body: "Unread test thread",
+      status: "open",
+      client_id: crypto.randomUUID(),
+      anchor: {
+        selector: "#intro p",
+        text: "Mark this text, leave a reply, or attach a screenshot.",
+        x: 0.5,
+        y: 0.5,
+        documentX: 600,
+        documentY: 550,
+        viewportWidth: 1280,
+      },
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  const id = (await created.json()).id;
+  await page.addInitScript(
+    ({ site, person }) =>
+      localStorage.setItem("flakflak:guest:" + site, JSON.stringify(person)),
+    { site: siteId, person: reader },
+  );
+  await page.goto(appOrigin + "/demo.html?site=" + siteId);
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await expect(
+    page.getByRole("button", { name: "Unread · 1", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await page.getByRole("button", { name: "Unread only", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /Author added #/ }),
+  ).toBeVisible();
+  expect(
+    (
+      await (
+        await request.get(
+          backend +
+            prefix +
+            "/comments?url=" +
+            encodeURIComponent(appOrigin + "/demo.html?site=" + siteId),
+          { headers: reading },
+        )
+      ).json()
+    ).comments[0].unread,
+  ).toBe(true);
+  await page.getByRole("button", { name: /Author added #/ }).click();
+  await expect(
+    page.getByText("No unread activity.", { exact: true }),
+  ).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "Comment", exact: true });
+  await dialog
+    .getByRole("textbox", { name: "Reply", exact: true })
+    .fill("My own reply");
+  await dialog
+    .getByRole("textbox", { name: "Reply", exact: true })
+    .press("Control+Enter");
+  await expect(dialog.getByText("My own reply", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await expect(
+    page.getByRole("button", { name: "Unread · 0", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Mark all as read", exact: true }),
+  ).toHaveCount(0);
+  await request.post(backend + prefix + "/comments/" + id + "/replies", {
+    headers: auth,
+    data: {
+      body: "A new reply from somebody else",
+      client_id: crypto.randomUUID(),
+    },
+  });
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Unread · 1", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Mark all as read", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Unread · 0", exact: true }),
+  ).toBeVisible();
+});
+
+test.afterEach(async ({ context }) => {
+  for (const page of context.pages())
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("new-dot dragging and keyboard movement preserve page-specific recoverable drafts", async ({
+  page,
+}) => {
+  const url = appOrigin + "/demo.html?site=" + siteId;
+  await page.goto(url);
+  await expect(
+    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+  ).toBeVisible();
+  await page
+    .locator("#intro p")
+    .click({ modifiers: ["Shift"], position: { x: 90, y: 10 } });
+  await page
+    .getByRole("textbox", { name: "Your name", exact: true })
+    .fill("Draft tester");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Comment", exact: true })
+    .fill("A draft that must survive moving its dot");
+  await page.getByLabel("Attach files", { exact: true }).setInputFiles({
+    name: "draft-capture.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6x8AAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await expect(
+    page.getByRole("img", { name: "draft-capture.png" }),
+  ).toBeVisible();
+  const dot = page.getByRole("button", {
+      name: "Move new comment dot",
+      exact: true,
+    }),
+    from = await dot.boundingBox(),
+    to = await page.locator("#one p").boundingBox();
+  await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to!.x + 50, to!.y + 10, { steps: 6 });
+  await page.mouse.up();
+  await expect(
+    page.getByRole("textbox", { name: "Comment", exact: true }),
+  ).toHaveValue("A draft that must survive moving its dot");
+  await dot.focus();
+  await dot.press("ArrowRight");
+  const moved = await dot.boundingBox();
+  await page
+    .getByRole("dialog", { name: "Comment", exact: true })
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await page.reload();
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await page
+    .getByRole("button", { name: "Resume new comment draft", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Comment", exact: true }),
+  ).toHaveValue("A draft that must survive moving its dot");
+  await expect(
+    page.getByRole("img", { name: "draft-capture.png" }),
+  ).toBeVisible();
+  const restored = await dot.boundingBox();
+  expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(2);
+  expect(Math.abs(restored!.y - moved!.y)).toBeLessThan(2);
+  await page
+    .getByRole("dialog", { name: "Comment", exact: true })
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await page.goto(url + "&variant=second");
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await expect(
+    page.getByRole("button", { name: "Resume new comment draft", exact: true }),
+  ).toHaveCount(0);
+  await page.goto(url);
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await page
+    .getByRole("button", { name: "Resume new comment draft", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Discard draft", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Comment", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("img", { name: "draft-capture.png" }),
+  ).toHaveCount(0);
+});
+
+test.describe("WordPress reference appearance", () => {
+  test.use({ deviceScaleFactor: 2 });
+  test("Midnight sidebar, thread, composer and semantic dot colors match the reference components", async ({
+    page,
+    request,
+    browserName,
+  }) => {
+    const origin = { Origin: appOrigin },
+      prefix = "/api/v1/sites/" + siteId;
+    const person = await (
+      await request.post(backend + prefix + "/guests", {
+        headers: origin,
+        data: { name: "Harry" },
+      })
+    ).json();
+    const headers = { ...origin, Authorization: "Bearer " + person.token };
+    let openId = 0;
+    for (let i = 0; i < 4; i++) {
+      const response = await request.post(backend + prefix + "/comments", {
+        headers,
+        data: {
+          url: appOrigin + "/demo.html?site=" + siteId,
+          title: "Home Page",
+          body: i ? "Completed feedback" : "test",
+          status: "open",
+          client_id: crypto.randomUUID(),
+          anchor: {
+            selector: "#intro > p",
+            text: "Mark this text, leave a reply, or attach a screenshot.",
+            x: 0.5,
+            y: 0.5,
+            documentX: 600,
+            documentY: 550,
+            viewportWidth: 1280,
+          },
+        },
+      });
+      expect(response.ok()).toBeTruthy();
+      const c = await response.json();
+      if (i)
+        await request.patch(
+          backend + prefix + "/comments/" + c.id + "/status",
+          { headers, data: { status: "closed", version: 1 } },
+        );
+      else openId = c.id;
+    }
+    await page.addInitScript(
+      ({ site, person }) => {
+        localStorage.setItem("flakflak:guest:" + site, JSON.stringify(person));
+        localStorage.setItem(
+          "flakflak:preferences:" + site,
+          JSON.stringify({
+            theme: "midnight",
+            side: "left",
+            size: "standard",
+            hideDots: false,
+            pauseAnimations: true,
+          }),
+        );
+      },
+      { site: siteId, person },
+    );
+    await page.goto(appOrigin + "/demo.html?site=" + siteId);
+    await page.evaluate(() => (document.title = "Home Page"));
+    const dot = page.getByRole("button", {
+      name: "Open comment #" + openId + " · open",
+      exact: true,
+    });
+    await expect(dot).toBeVisible();
+    expect(
+      await dot.evaluate(
+        (node) => getComputedStyle(node, "::after").backgroundColor,
+      ),
+    ).toBe("rgb(255, 87, 51)");
+    await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+    await expect(
+      page.getByRole("button", { name: "Unread · 0", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("75% finished", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("3 closed · 1 remaining", { exact: true }),
+    ).toBeVisible();
+    const sidebar = page.getByRole("complementary", {
+      name: "FlakFlak sidebar",
+    });
+    expect((await sidebar.boundingBox())!.width).toBe(320);
+    await sidebar.screenshot({
+      path: "/private/tmp/flakflak-sidebar-" + browserName + ".png",
+    });
+    await sidebar.locator(".comment-row").click();
+    const panel = page.getByRole("dialog", { name: "Comment", exact: true });
+    await expect(
+      panel.getByRole("button", { name: "Reply", exact: true }),
+    ).toBeEnabled();
+    expect((await panel.boundingBox())!.width).toBe(350);
+    await expect(
+      panel.getByRole("button", { name: "Details", exact: true }),
+    ).toBeVisible();
+    await expect(panel.locator(".native-file")).toBeHidden();
+    await panel.screenshot({
+      path: "/private/tmp/flakflak-thread-" + browserName + ".png",
+    });
+    await panel.getByRole("button", { name: "Close", exact: true }).click();
+    await page
+      .locator("#intro p")
+      .click({ modifiers: ["Shift"], position: { x: 500, y: 10 } });
+    await page
+      .getByRole("textbox", { name: "Comment", exact: true })
+      .fill("test");
+    expect((await panel.boundingBox())!.width).toBe(320);
+    await expect(
+      panel.getByRole("button", { name: "Open", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      panel.getByRole("button", { name: "Content", exact: true }),
+    ).toBeVisible();
+    await expect(panel.getByRole("combobox")).toHaveCount(0);
+    await expect(
+      panel.getByRole("button", { name: "Add files", exact: true }),
+    ).toBeVisible();
+    await panel.screenshot({
+      path: "/private/tmp/flakflak-composer-" + browserName + ".png",
+    });
+  });
 });

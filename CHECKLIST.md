@@ -27,18 +27,21 @@
 - [x] PHP feature tests and TypeScript production builds.
 - [x] Chrome workflow across two origins; desktop/mobile screenshots and viewport bounds.
 
-## Existing-plugin parity still to implement
-- [ ] Server-backed unread state and unread-only controls.
+## Widget feature parity
+- [x] Server-backed unread cursors, current-page unread filter, mark-all-as-read, and anonymous browser read state.
 - [x] Site-wide search UI near All pages, pagination, debounce and stale-result guards.
-- [ ] Dot movement and explicit target reattachment.
-- [ ] Ownership-based edit/delete actions.
-- [ ] Theme selection, sidebar side/size, pause/hide dot settings.
-- [ ] Previous/next thread navigation and collapse/expand-all.
-- [ ] Paginated reply loading for large threads.
-- [ ] Attachment failure/retry UX for each thread upload.
+- [x] Alt/Option dragging, new-dot dragging/arrow keys, and click-to-preview/confirm/cancel target reattachment.
+- [x] Identity-based comment editing/deletion and reply/file deletion; display names do not grant ownership.
+- [x] Six dark themes, persistent sidebar side/size, pause/hide dots, and a Settings gear.
+- [x] Previous/next thread navigation and persistent collapse/expand-all.
+- [x] Load the latest two replies initially, then older history in 20-reply pages; retain old-client compatibility.
+- [x] Per-file retry/removal controls with stable upload IDs after failed or lost responses.
 - [x] Activity date grouping.
-- [ ] Activity unread filtering.
-- [ ] Optional importer for existing WordPress feedback.
+- [x] Activity unread filtering without marking threads read just by browsing the feed.
+- [x] WordPress reference layout: original dot hues/glow, segmented statuses, header chevron, upload sections, sidebar rows/counts/totals.
+
+## Optional migration
+- [ ] Importer for existing WordPress feedback.
 
 ## Production deployment
 - [x] Environment separation and PHP 8.2 compatibility target.
@@ -50,7 +53,8 @@
 - [ ] Create three ServerPilot apps, dedicated system user, DNS, SSL and database.
 - [ ] Set production secrets, backup command, upload limits and permissions.
 - [ ] Test actual deployment and rollback on a staging ServerPilot server.
-- [ ] Test Safari, Firefox, mobile devices, Drupal and a client-rendered site.
+- [ ] Verify physical mobile devices, actual Safari, Drupal and a real client-rendered site before launch.
+- [x] Complete Chromium/Firefox/WebKit visual-reference regression run: 18 browser workflows passed.
 
 ## Later
 - [ ] Account registration/sign-in and secure guest-to-account linking.

@@ -74,7 +74,7 @@ class FeedbackController extends Controller
 
     private function commentData($c): array
     {
-        return ['id' => $c->id, 'page_id' => $c->page_id, 'participant_id' => $c->participant_id, 'name' => DB::table('participants')->where('id', $c->participant_id)->value('name'),
+        return ['id' => $c->id, 'page_id' => $c->page_id, 'participant_id' => $c->participant_id, 'name' => $c->author_name ?? DB::table('participants')->where('id', $c->participant_id)->value('name'),
             'body' => $c->body, 'status' => $c->status, 'anchor' => json_decode($c->anchor, true), 'version' => $c->version, 'created_at' => $c->created_at];
     }
 
@@ -86,15 +86,25 @@ class FeedbackController extends Controller
         if (! $page) {
             return ['comments' => [], 'more' => false, 'before' => null];
         }
-        $q = DB::table('comments')->where('site_id', $site)->where('page_id', $page->id);
+        $q = DB::table('comments')->leftJoin('participants as author', 'author.id', '=', 'comments.participant_id')->where('comments.site_id', $site)->where('comments.page_id', $page->id)->select('comments.*', 'author.name as author_name');
         if ($r->input('before')) {
-            $q->where('id', '<', $r->integer('before'));
+            $q->where('comments.id', '<', $r->integer('before'));
         }
-        $rows = $q->orderByDesc('id')->limit(101)->get();
+        $rows = $q->orderByDesc('comments.id')->limit(101)->get();
         $more = $rows->count() > 100;
         $rows = $rows->take(100);
 
-        return ['comments' => $rows->map(fn ($c) => $this->commentData($c))->values(), 'more' => $more, 'before' => $rows->last()?->id];
+        $person = InteractionController::participant($r, $site);
+        $ids = $rows->pluck('id');
+        $latest = DB::table('activity')->where('site_id', $site)->whereIn('comment_id', $ids)->groupBy('comment_id')->selectRaw('comment_id,MAX(id) as latest')->pluck('latest', 'comment_id');
+        $other = DB::table('activity')->where('site_id', $site)->whereIn('comment_id', $ids);
+        if ($person) {
+            $other->where('participant_id', '!=', $person->id);
+        }
+        $other = $other->groupBy('comment_id')->selectRaw('comment_id,MAX(id) as latest')->pluck('latest', 'comment_id');
+        $read = $person ? DB::table('read_states')->where('participant_id', $person->id)->whereIn('comment_id', $ids)->pluck('activity_id', 'comment_id') : collect();
+
+        return ['comments' => $rows->map(fn ($c) => array_merge($this->commentData($c), ['latest_activity_id' => (int) ($latest[$c->id] ?? 0), 'unread' => (int) ($other[$c->id] ?? 0) > (int) ($read[$c->id] ?? 0)]))->values(), 'more' => $more, 'before' => $rows->last()?->id];
     }
 
     public function createComment(Request $r, string $site)
@@ -125,11 +135,18 @@ class FeedbackController extends Controller
 
     public function detail(Request $r, string $site, string $comment)
     {
+        // Capture the read watermark before fetching content so concurrent arrivals stay unread.
+        $snapshot = (int) DB::table('activity')->where('site_id', $site)->where('comment_id', $comment)->max('id');
         $c = $this->thread($site, $comment);
-        $replies = DB::table('replies')->join('participants', 'participants.id', '=', 'replies.participant_id')->where('comment_id', $c->id)->orderBy('replies.id')->get(['replies.id', 'replies.participant_id', 'participants.name', 'replies.body', 'replies.kind', 'replies.created_at']);
+        $query = DB::table('replies')->join('participants', 'participants.id', '=', 'replies.participant_id')->where('comment_id', $c->id);
+        $count = (clone $query)->count();
+        if ($r->integer('reply_limit') === 2) {
+            $query->limit(2);
+        }
+        $replies = $query->orderByDesc('replies.id')->get(['replies.id', 'replies.participant_id', 'participants.name', 'replies.body', 'replies.kind', 'replies.created_at'])->reverse()->values();
         $files = DB::table('attachments')->where('comment_id', $c->id)->get()->map(fn ($f) => ['id' => $f->id, 'name' => $f->name, 'mime' => $f->mime, 'size' => $f->size, 'participant_id' => $f->participant_id, 'url' => URL::temporarySignedRoute('attachment', now()->addHours(2), ['attachment' => $f->id])]);
 
-        return ['comment' => $this->commentData($c), 'replies' => $replies, 'attachments' => $files];
+        return ['comment' => $this->commentData($c), 'replies' => $replies, 'reply_count' => $count, 'reply_before' => $count > $replies->count() ? $replies->first()?->id : null, 'latest_activity_id' => $snapshot, 'attachments' => $files];
     }
 
     public function reply(Request $r, string $site, string $comment)
@@ -206,11 +223,13 @@ class FeedbackController extends Controller
 
     public function pages(string $site)
     {
-        return DB::table('pages')->where('site_id', $site)->get()->map(function ($page) use ($site) {
-            $counts = DB::table('comments')->where('site_id', $site)->where('page_id', $page->id)->selectRaw('status, count(*) as count')->groupBy('status')->pluck('count', 'status');
+        $counts = DB::table('comments')->where('site_id', $site)->groupBy('page_id', 'status')->selectRaw('page_id,status,COUNT(*) as count')->get();
+        $byPage = [];
+        foreach ($counts as $row) {
+            $byPage[$row->page_id][$row->status] = (int) $row->count;
+        }
 
-            return ['id' => $page->id, 'title' => $page->title, 'url' => $page->url, 'counts' => $counts];
-        });
+        return DB::table('pages')->where('site_id', $site)->whereIn('id', array_keys($byPage))->orderBy('title')->get()->map(fn ($page) => ['id' => $page->id, 'title' => $page->title, 'url' => $page->url, 'counts' => $byPage[$page->id]]);
     }
 
     public function search(Request $r, string $site)
@@ -245,12 +264,30 @@ class FeedbackController extends Controller
     public function activity(Request $r, string $site)
     {
         $r->validate(['before' => 'nullable|integer|min:1']);
-        $q = DB::table('activity')->join('participants', 'participants.id', '=', 'activity.participant_id')->join('comments', 'comments.id', '=', 'activity.comment_id')->join('pages','pages.id','=','comments.page_id')->where('activity.site_id',$site);
-        if ($r->input('before')) {
-            $q->where('activity.id','<',$r->integer('before'));
+        $person = InteractionController::participant($r, $site);
+        $q = DB::table('activity')->join('participants', 'participants.id', '=', 'activity.participant_id')->join('comments', 'comments.id', '=', 'activity.comment_id')->join('pages', 'pages.id', '=', 'comments.page_id')->where('activity.site_id', $site);
+        if ($person) {
+            $q->leftJoin('read_states', function ($join) use ($person) {
+                $join->on('read_states.comment_id', '=', 'activity.comment_id')->where('read_states.participant_id', '=', $person->id);
+            });
+            $q->selectRaw('CASE WHEN activity.participant_id = ? THEN 0 WHEN activity.id > COALESCE(read_states.activity_id,0) THEN 1 ELSE 0 END as unread', [$person->id]);
+            if ($r->boolean('unread_only')) {
+                $q->where('activity.participant_id', '!=', $person->id)->where(function ($q) {
+                    $q->whereNull('read_states.activity_id')->orWhereColumn('activity.id', '>', 'read_states.activity_id');
+                });
+            }
+        } else {
+            $q->selectRaw('1 as unread');
         }
-        $rows = $q->orderByDesc('activity.id')->limit(21)->get(['activity.id', 'activity.comment_id', 'participants.name', 'activity.type', 'activity.summary', 'activity.created_at', 'pages.title', 'pages.url']);
+        if ($r->input('before')) {
+            $q->where('activity.id', '<', $r->integer('before'));
+        }
+        $rows = $q->orderByDesc('activity.id')->limit(21)->addSelect(['activity.id', 'activity.comment_id', 'participants.name', 'activity.type', 'activity.summary', 'comments.body as comment_body', 'activity.created_at', 'pages.title', 'pages.url'])->get();
 
-        return ['events' => $rows->take(20)->values(), 'more' => $rows->count() > 20, 'before' => $rows->take(20)->last()?->id];
+        return ['events' => $rows->take(20)->map(function ($row) {
+            $row->unread = (bool) $row->unread;
+
+            return $row;
+        })->values(), 'more' => $rows->count() > 20, 'before' => $rows->take(20)->last()?->id];
     }
 }

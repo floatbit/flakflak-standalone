@@ -1,7 +1,7 @@
 {
   "name": "flakflak",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "workspaces": [
     "app",
     "embed"
@@ -13,7 +13,8 @@
     "dev:app": "npm run dev -w app",
     "dev:embed": "npm run dev -w embed",
     "test:browser": "playwright test",
-    "format": "prettier --write \"{app,embed,shared}/**/*.{ts,vue,css,json,html}\" \"tests/browser/**/*.ts\" playwright.config.ts"
+    "format": "prettier --write \"{app,embed,shared}/**/*.{ts,vue,css,json,html}\" \"tests/browser/**/*.ts\" playwright.config.ts",
+    "test:browsers": "FLAKFLAK_ALL_BROWSERS=1 playwright test"
   },
   "engines": {
     "node": ">=22.12"

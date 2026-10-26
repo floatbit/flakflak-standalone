@@ -88,6 +88,17 @@ production deployment has been performed.
 
 ## Implementation status
 
-See `CHECKLIST.md` for delivered features, remaining parity work, and deployment
-verification that still requires your production server. This is the first
-standalone local milestone, not a claim of full WordPress-plugin parity.
+The core embedded review tools and WordPress reference layout are ported: themes,
+sidebar settings, saturated status dots, comments/replies/files, drafts, unread
+tracking, review navigation, target movement/reattachment and ownership actions.
+Select **Midnight** in Settings for the blue appearance in the WordPress reference
+screenshots; Graphite remains the default, and existing personal choices are kept.
+
+New widgets request `reply_limit=2` for thread responses. The API retains its
+original complete response for older loaded widgets, while exposing cursor-based
+older-reply pages to new builds. This avoids forcing open pages to refresh during
+an update.
+
+See `CHECKLIST.md` for the optional WordPress importer, later account features,
+and production/CMS/device verification still needed. The existing WordPress
+plugin and its database remain independent and unchanged.

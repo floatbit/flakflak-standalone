@@ -30,6 +30,8 @@ export interface Comment {
   anchor: Anchor;
   version: number;
   created_at: string;
+  unread?: boolean;
+  latest_activity_id?: number;
 }
 export interface Reply {
   id: number;
@@ -48,6 +50,9 @@ export interface Attachment {
   url: string;
 }
 export interface Thread {
+  reply_count: number;
+  reply_before: number | null;
+  latest_activity_id: number;
   comment: Comment;
   replies: Reply[];
   attachments: Attachment[];
@@ -59,11 +64,13 @@ export interface Page {
   counts: Partial<Record<Status, number>>;
 }
 export interface Activity {
+  unread: boolean;
   id: number;
   comment_id: number;
   name: string;
   type: string;
   summary: string;
+  comment_body?: string;
   created_at: string;
   title: string;
   url: string;

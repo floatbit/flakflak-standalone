@@ -77,7 +77,7 @@ function start(siteId: string, base: string) {
   const statuses: Status[] = ["open", "review", "content", "closed"];
   const colors: Record<Status, string> = {
     open: "#ffaf99",
-    review: "#b6c7ff",
+    review: "#83d4ff",
     content: "#ddbcff",
     closed: "#9de0b9",
   };
@@ -110,7 +110,7 @@ function start(siteId: string, base: string) {
   });
   const dotColors: Record<Status, string> = {
     open: "#FF5733",
-    review: "#3357FF",
+    review: "#168BD2",
     content: "#9333EA",
     closed: "#3CAE63",
   };
@@ -511,7 +511,7 @@ function start(siteId: string, base: string) {
       { width: innerWidth, height: innerHeight },
       { width: panel.offsetWidth, height: panel.offsetHeight },
       sidebarOpen
-        ? { side: prefs.side, width: sidebar.offsetWidth }
+        ? { side: prefs.side, width: sidebar.offsetWidth + 12 }
         : undefined,
     );
     panel.style.left = placement.left + "px";
@@ -938,13 +938,19 @@ function start(siteId: string, base: string) {
     );
     panel.append(navigation);
     const tools = el("div", "", "toolbar");
-    tools.append(
-      button("Copy link", async () => {
-        const u = new URL(location.href);
-        u.hash = "flakflak-comment-" + c.id;
-        await navigator.clipboard.writeText(u.href);
-      }),
-    );
+    let copyFeedback: ReturnType<typeof setTimeout> | undefined;
+    const copyLink = button("Copy link", async () => {
+      const u = new URL(location.href);
+      u.hash = "flakflak-comment-" + c.id;
+      await navigator.clipboard.writeText(u.href);
+      copyLink.textContent = "Copied!";
+      clearTimeout(copyFeedback);
+      copyFeedback = setTimeout(() => {
+        if (copyLink.isConnected) copyLink.textContent = "Copy link";
+      }, 2000);
+    });
+    copyLink.setAttribute("aria-live", "polite");
+    tools.append(copyLink);
     tools.append(button("Refresh", () => openThread(c.id)));
     const details = el("div", "", "comment-details hide");
     details.id = "ff-comment-details-" + c.id;
@@ -964,11 +970,15 @@ function start(siteId: string, base: string) {
     toggleDetails.setAttribute("aria-controls", details.id);
     header.insertBefore(toggleDetails, header.lastElementChild);
     const controls = el("div", "", "toolbar");
-    controls.append(button("Reattach target", () => startReattach(t)));
+    controls.append(button("Reposition Dot", () => startReattach(t)));
     if (guest?.id === c.participant_id) {
       controls.append(
         button("Edit comment", () => {
+          body.querySelector(".comment-editor")?.remove();
+          const original = body.querySelector<HTMLElement>(".comment-text");
           const edit = el("textarea");
+          edit.maxLength = 10000;
+          edit.rows = 4;
           edit.value = readStored<string>(
             draftKey("edit", String(c.id)),
             c.body,
@@ -994,25 +1004,19 @@ function start(siteId: string, base: string) {
           editor.append(
             edit,
             save,
-            button("Cancel edit", () => editor.remove()),
+            button("Cancel edit", () => {
+              editor.remove();
+              original?.classList.remove("hide");
+              position();
+            }),
           );
-          details.querySelector(".comment-editor")?.remove();
-          details.append(editor);
+          original?.classList.add("hide");
+          if (original) original.before(editor);
+          else body.append(editor);
           shortcut(edit, save);
+          position();
           edit.focus();
         }),
-        button("Delete comment", () =>
-          perform(async () => {
-            if (!confirm("Delete this comment, its replies, and attachments?"))
-              return;
-            await request("/comments/" + c.id, { method: "DELETE" });
-            threadUploads.delete(c.id);
-            thread = null;
-            threadRevision++;
-            panel.classList.add("hide");
-            await load();
-          }),
-        ),
       );
     }
     const copy = tools.firstElementChild as HTMLButtonElement,
@@ -1404,6 +1408,7 @@ function start(siteId: string, base: string) {
     }
   }
   function gallery(files: Attachment[], index: number) {
+    if (!files.length) return;
     const g = el("section", "", "gallery");
     g.setAttribute("role", "dialog");
     g.setAttribute("aria-modal", "true");
@@ -1414,9 +1419,17 @@ function start(siteId: string, base: string) {
     const close = () => {
       g.querySelectorAll("video").forEach((v) => v.pause());
       g.remove();
+      window.removeEventListener("keydown", escapeGallery, true);
       document.documentElement.style.overflow = savedOverflow;
       focus?.focus();
     };
+    function escapeGallery(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      close();
+    }
+    window.addEventListener("keydown", escapeGallery, true);
     function render() {
       g.querySelectorAll("video").forEach((v) => v.pause());
       g.replaceChildren(titlebar(files[index].name, close));
@@ -1435,15 +1448,15 @@ function start(siteId: string, base: string) {
       }
       const foot = el("footer"),
         prev = button("← Previous", () => {
-          index--;
+          index = (index - 1 + files.length) % files.length;
           render();
         }),
         next = button("Next →", () => {
-          index++;
+          index = (index + 1) % files.length;
           render();
         });
-      prev.disabled = index === 0;
-      next.disabled = index === files.length - 1;
+      prev.disabled = files.length < 2;
+      next.disabled = files.length < 2;
       foot.append(prev, el("span", index + 1 + " / " + files.length), next);
       g.append(media, foot);
       g.querySelector("button")?.focus();
@@ -1453,12 +1466,14 @@ function start(siteId: string, base: string) {
         e.stopPropagation();
         close();
       }
-      if (e.key === "ArrowRight" && index < files.length - 1) {
-        index++;
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        index = (index + 1) % files.length;
         render();
       }
-      if (e.key === "ArrowLeft" && index > 0) {
-        index--;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        index = (index - 1 + files.length) % files.length;
         render();
       }
       if (e.key === "Tab") {
@@ -2253,7 +2268,10 @@ function start(siteId: string, base: string) {
     }
     p.append(document.createTextNode("Status updated to "));
     const strong = el("strong", match[1]);
-    strong.style.color = colors[match[1] as Status];
+    strong.classList.add("history-status");
+    strong.dataset.status = match[1];
+    strong.style.color =
+      "var(--ff-status-" + match[1] + ", " + colors[match[1] as Status] + ")";
     p.append(strong);
     appendLinkedText(p, match[2]);
     return p;
@@ -2372,6 +2390,8 @@ function start(siteId: string, base: string) {
       y = event.clientY,
       moved = false;
     node.style.visibility = "hidden";
+    draggingCursor = true;
+    syncPageCursor();
     const draw = () => {
       preview.style.left = x + "px";
       preview.style.top = y + "px";
@@ -2379,6 +2399,8 @@ function start(siteId: string, base: string) {
     draw();
     const cleanup = () => {
       controller.abort();
+      draggingCursor = false;
+      syncPageCursor();
       preview.remove();
       node.style.visibility = "";
       cancelDrag = null;
@@ -2499,6 +2521,22 @@ function start(siteId: string, base: string) {
       closePanel();
     }
   });
+  let shiftPlacementCursor = false,
+    draggingCursor = false;
+  const pageCursorStyle = document.createElement("style");
+  pageCursorStyle.dataset.flakflakCursor = "";
+  document.documentElement.append(pageCursorStyle);
+  function syncPageCursor() {
+    const cursor = draggingCursor
+      ? "grabbing"
+      : shiftPlacementCursor
+        ? "crosshair"
+        : "";
+    pageCursorStyle.textContent = cursor
+      ? "html, body, body * { cursor: " + cursor + " !important; }"
+      : "";
+    host.dataset.dragging = String(draggingCursor);
+  }
   let controlOnly = false;
   document.addEventListener("keydown", (e) => {
     const editing = e
@@ -2508,6 +2546,11 @@ function start(siteId: string, base: string) {
           node instanceof Element &&
           node.matches('input,textarea,select,[contenteditable="true"]'),
       );
+    if (e.key === "Shift" && !editing && !e.composedPath().includes(host)) {
+      shiftPlacementCursor = true;
+      syncPageCursor();
+    }
+    host.dataset.altHeld = String(e.altKey);
     if (
       e.key === "Control" &&
       !e.repeat &&
@@ -2520,6 +2563,11 @@ function start(siteId: string, base: string) {
     else if (e.key !== "Control") controlOnly = false;
   });
   document.addEventListener("keyup", (e) => {
+    if (e.key === "Shift") {
+      shiftPlacementCursor = false;
+      syncPageCursor();
+    }
+    host.dataset.altHeld = String(e.altKey);
     if (e.key === "Control") {
       if (controlOnly) {
         setSidebarOpen(!sidebarOpen);
@@ -2529,6 +2577,10 @@ function start(siteId: string, base: string) {
   });
   addEventListener("blur", () => {
     controlOnly = false;
+    shiftPlacementCursor = false;
+    draggingCursor = false;
+    host.dataset.altHeld = "false";
+    syncPageCursor();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -2571,6 +2623,7 @@ function start(siteId: string, base: string) {
     }
   }, 700);
   addEventListener("pagehide", () => {
+    pageCursorStyle.remove();
     clearInterval(navigation);
     observer.disconnect();
     changes.disconnect();

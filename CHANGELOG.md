@@ -1,5 +1,18 @@
 # Changelog
 
+## Floating panels and review interaction polish
+
+Commit message: Refine floating panels, status contrast, and comment interactions
+
+- Float the sidebar with viewport margins, rounded corners, and a shadow; preserve left/right positioning and responsive comment placement.
+- Make the attachment viewer edge-to-edge with square borderless chrome, wrapping navigation, Escape dismissal, and a white counter in every theme.
+- Distinguish Review blue from Content purple; give light-theme status history distinct readable colors and selected status buttons white text.
+- Remove Delete comment from the widget and fix the owner pencil to edit original text inline with cancel and keyboard-save support.
+- Clamp sidebar comment previews to two lines and simplify Expand all/Collapse all styling across themes.
+- Rename the target action to Reposition Dot and show Copied! after successful link copying.
+- Add Shift crosshair and Option/Alt grab/grabbing cursor feedback with release and blur cleanup.
+- Extend browser coverage for floating geometry, gallery cycling and contrast, light-theme status colors, inline editing, clipboard feedback, and placement cursors.
+
 ## Streamlined theme selection
 
 Commit message: Streamline theme choices and repair retained theme styles

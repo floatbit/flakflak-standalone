@@ -151,9 +151,10 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6x8AAAAASUVORK5CYII=",
     "base64",
   );
-  await page
-    .getByLabel("Add attachments")
-    .setInputFiles({ name: "capture.png", mimeType: "image/png", buffer: png });
+  await page.getByLabel("Add attachments").setInputFiles([
+    { name: "capture.png", mimeType: "image/png", buffer: png },
+    { name: "capture-2.png", mimeType: "image/png", buffer: png },
+  ]);
   await expect(page.getByRole("img", { name: "capture.png" })).toBeVisible();
   await expect
     .poll(() =>
@@ -162,12 +163,50 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
         .evaluate((img: HTMLImageElement) => img.naturalWidth),
     )
     .toBeGreaterThan(0);
-  await page.getByRole("img", { name: "capture.png" }).click();
+  await expect(
+    page.getByRole("img", { name: "capture-2.png", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Add attachments")).toBeEnabled();
+  await page.locator(".attachments-section .files img").first().click();
   await expect(page.getByRole("dialog", { name: "Attachments" })).toBeVisible();
+  const viewer = page.getByRole("dialog", { name: "Attachments" });
+  expect(await viewer.boundingBox()).toEqual({
+    x: 0,
+    y: 0,
+    width: page.viewportSize()!.width,
+    height: page.viewportSize()!.height,
+  });
+  await expect(viewer).toHaveCSS("border-radius", "0px");
+  await expect(viewer).toHaveCSS("border-top-width", "0px");
+  await expect(viewer.getByText("1 / 2", { exact: true })).toBeVisible();
+  await page
+    .locator("[data-flakflak-root]")
+    .evaluate((node) => node.setAttribute("data-theme", "macos9"));
+  await expect(viewer.getByText("1 / 2", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(255, 255, 255)",
+  );
+  await page
+    .locator("[data-flakflak-root]")
+    .evaluate((node) => node.setAttribute("data-theme", "graphite"));
+
+  await viewer.getByRole("button", { name: "← Previous", exact: true }).click();
+  await expect(viewer.getByText("2 / 2", { exact: true })).toBeVisible();
+  await viewer.getByRole("button", { name: "Next →", exact: true }).click();
+  await expect(viewer.getByText("1 / 2", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  await expect(
+    page.getByRole("dialog", { name: "Comment", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("img", { name: "capture.png", exact: true }).click();
+
   await page
     .getByRole("dialog", { name: "Attachments" })
     .getByRole("button", { name: "Close", exact: true })
     .click();
+  await page.getByRole("button", { name: "Content", exact: true }).click();
+  await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.getByRole("button", { name: "Closed", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Resolution note", exact: true })
@@ -178,6 +217,40 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   await expect(
     page.getByRole("button", { name: "Closed", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Delete comment", exact: true }),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: /Show earlier replies/ }).click();
+  await expect(page.locator(".history-status")).toHaveCount(4);
+  for (const theme of [
+    "windowsxp",
+    "macos9",
+    "linen",
+    "macintosh",
+    "windows311",
+    "gameboy",
+  ]) {
+    await page
+      .locator("[data-flakflak-root]")
+      .evaluate((node, value) => node.setAttribute("data-theme", value), theme);
+    const statusColors = await page
+      .locator(".history-status")
+      .evaluateAll((nodes) =>
+        Object.fromEntries(
+          nodes.map((node) => [
+            node.getAttribute("data-status"),
+            getComputedStyle(node).color,
+          ]),
+        ),
+      );
+    expect(Object.keys(statusColors)).toHaveLength(4);
+    expect(new Set(Object.values(statusColors)).size).toBe(4);
+    await expect(
+      page.locator('.status-grid button[aria-pressed="true"]'),
+    ).toHaveCSS("color", "rgb(255, 255, 255)");
+  }
   await page.reload();
   await openSidebar(page);
   await expect(page.getByText("100% finished")).toBeVisible();
@@ -357,6 +430,13 @@ test("settings persist, stay isolated from the host page, and fit review navigat
   await expect(page.getByLabel("Hide dots", { exact: true })).toBeChecked();
   await page.screenshot({ path: "/private/tmp/flakflak-settings-desktop.png" });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await host.evaluate((node) => node.setAttribute("data-theme", "macos9"));
+  const groupAction = page.getByRole("button", {
+    name: "Collapse all",
+    exact: true,
+  });
+  await expect(groupAction).toHaveCSS("box-shadow", "none");
+  await expect(groupAction).toHaveCSS("border-radius", "4px");
   await page.getByRole("button", { name: "Collapse all", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Expand all", exact: true }),
@@ -441,7 +521,45 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   const path = "/api/v1/sites/" + siteId + "/comments/" + id;
   const detail = async () =>
     (await request.get(backend + path, { headers })).json();
-  await dialog.getByRole("button", { name: "Details", exact: true }).click();
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          sessionStorage.setItem("test-copied-link", text);
+        },
+      },
+    }),
+  );
+  await dialog.getByRole("button", { name: "Copy link", exact: true }).click();
+  await expect(
+    dialog.getByRole("button", { name: "Copied!", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("test-copied-link")),
+  ).toContain("#flakflak-comment-" + id);
+  await expect(
+    dialog.getByRole("button", { name: "Copy link", exact: true }),
+  ).toBeVisible();
+
+  await expect(
+    dialog.getByRole("button", { name: "Details", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await dialog
+    .getByRole("button", { name: "Edit comment", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("textbox", { name: "Edit comment", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("textbox", { name: "Edit comment", exact: true }),
+  ).toHaveValue("Interaction parity thread");
+  await dialog
+    .getByRole("button", { name: "Cancel edit", exact: true })
+    .click();
+  await expect(
+    dialog.getByText("Interaction parity thread", { exact: true }),
+  ).toBeVisible();
   await dialog
     .getByRole("button", { name: "Edit comment", exact: true })
     .click();
@@ -505,7 +623,7 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   await openSidebar(page);
   await dialog.getByRole("button", { name: "Details", exact: true }).click();
   await dialog
-    .getByRole("button", { name: "Reattach target", exact: true })
+    .getByRole("button", { name: "Reposition Dot", exact: true })
     .click();
   await expect(
     page.getByRole("complementary", { name: "FlakFlak sidebar" }),
@@ -519,7 +637,7 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   expect((await detail()).comment.anchor).toEqual(originalAnchor);
   await dialog.getByRole("button", { name: "Details", exact: true }).click();
   await dialog
-    .getByRole("button", { name: "Reattach target", exact: true })
+    .getByRole("button", { name: "Reposition Dot", exact: true })
     .click();
   await page.locator("#two p").click();
   await page
@@ -538,11 +656,13 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   const point = await dot.boundingBox(),
     target = await page.locator("#one p").boundingBox();
   await page.keyboard.down("Alt");
+  await expect(dot).toHaveCSS("cursor", "grab");
   await page.mouse.move(
     point!.x + point!.width / 2,
     point!.y + point!.height / 2,
   );
   await page.mouse.down();
+  await expect(page.locator("#intro p")).toHaveCSS("cursor", "grabbing");
   await page.mouse.move(target!.x + 50, target!.y + 10, { steps: 5 });
   await page.mouse.up();
   await page.keyboard.up("Alt");
@@ -599,11 +719,10 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
     dialog.getByRole("button", { name: "Reply", exact: true }),
   ).toBeEnabled();
   await dialog.getByRole("button", { name: "Details", exact: true }).click();
-  page.once("dialog", (d) => d.accept());
-  await dialog
-    .getByRole("button", { name: "Delete comment", exact: true })
-    .click();
-  await expect(dialog).toBeHidden();
+  await expect(
+    dialog.getByRole("button", { name: "Delete comment", exact: true }),
+  ).toHaveCount(0);
+  expect((await request.delete(backend + path, { headers })).ok()).toBe(true);
   expect((await request.get(backend + path, { headers })).status()).toBe(404);
 });
 
@@ -894,7 +1013,11 @@ test.describe("WordPress reference appearance", () => {
     const sidebar = page.getByRole("complementary", {
       name: "FlakFlak sidebar",
     });
-    expect((await sidebar.boundingBox())!.width).toBe(320);
+    const floating = (await sidebar.boundingBox())!;
+    expect(floating.width).toBe(320);
+    expect(floating.x).toBe(12);
+    expect(floating.y).toBe(12);
+    expect(floating.height).toBe(page.viewportSize()!.height - 24);
     await sidebar.screenshot({
       path: "/private/tmp/flakflak-sidebar-" + browserName + ".png",
     });
@@ -997,4 +1120,15 @@ test("new themes apply and retain readable settings", async ({ page }) => {
       path: "/private/tmp/flakflak-theme-" + value + ".png",
     });
   }
+});
+
+test("Shift placement cursor resets when released", async ({ page }) => {
+  await page.goto(appOrigin + "/demo.html?site=" + siteId);
+  await expect(
+    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+  ).toBeVisible();
+  await page.keyboard.down("Shift");
+  await expect(page.locator("#intro p")).toHaveCSS("cursor", "crosshair");
+  await page.keyboard.up("Shift");
+  await expect(page.locator("#intro p")).not.toHaveCSS("cursor", "crosshair");
 });

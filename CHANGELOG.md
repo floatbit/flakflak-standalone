@@ -1,5 +1,18 @@
 # Changelog
 
+## Private email accounts and invitations
+
+Commit message: Add invitation-only email accounts and standalone reset tools
+
+- Replace owner-key and name-only access with email magic-link registration, verified accounts, profiles, and revocable sessions.
+- Enforce Owner/Member membership on every feedback endpoint and authenticated attachment fetch; retire guest creation and public signed media.
+- Add site-specific Members management with Pending/Accepted status, copy/resend/delete invitation actions, explicit matching-email acceptance, and member removal.
+- Connect widgets through a site/origin/verifier-bound popup handoff with manual-code fallback and no third-party cookies.
+- Add feedback reset with file cleanup, versioned stale-write protection, browser-draft invalidation, and a CLI command to claim existing unowned sites.
+- Add an interactive `nuke.sh` local/live reset for all standalone data, with a default-No confirmation and retained configuration/migrations.
+- Preserve draft attachment bytes across WebKit reloads and wait for browser storage before closing the composer.
+- Document local mail-log testing, SMTP setup, and the deliberate ServerPilot authentication cutover. Existing feedback is not automatically deleted.
+
 ## Floating panels and review interaction polish
 
 Commit message: Refine floating panels, status contrast, and comment interactions

@@ -56,6 +56,16 @@
 - [ ] Verify physical mobile devices, actual Safari, Drupal and a real client-rendered site before launch.
 - [x] Complete Chromium/Firefox/WebKit visual-reference regression run: 18 browser workflows passed.
 
-## Later
-- [ ] Account registration/sign-in and secure guest-to-account linking.
-- [ ] Site memberships, invitations, roles and per-action permissions.
+## Private email accounts
+
+- [x] Email magic links, display names, account sessions and sign-out.
+- [x] Owner/Member per-site membership and all-feedback access enforcement.
+- [x] Pending/Accepted invitations with copy, resend, delete, and member removal.
+- [x] Popup/code widget handoff without third-party cookies.
+- [x] Authenticated private media; old public guest/signed routes retired.
+- [x] Owner feedback reset and stale-draft invalidation.
+- [x] Optional interactive nuke.sh to start the entire standalone installation fresh.
+- [x] Local additive migration; no automatic legacy-data deletion.
+- [ ] Configure/verify production email sender and provider.
+- [ ] Deploy account release and claim live site ownership.
+- [ ] Explicitly reset legacy production feedback and invite actual members.

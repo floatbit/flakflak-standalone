@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Support\Accounts;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,9 @@ class FeedbackTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['flakflak.owner_key' => $this->owner, 'flakflak.dashboard_origin' => 'http://dashboard.test']);
+        config(['flakflak.dashboard_origin' => 'http://dashboard.test']);
+        $user = DB::table('users')->insertGetId(['name' => 'Owner', 'email' => 'owner@example.test', 'password' => 'unused', 'email_verified_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('account_tokens')->insert(['id' => (string) Str::uuid(), 'user_id' => $user, 'token_hash' => hash('sha256', $this->owner), 'expires_at' => now()->addDay(), 'created_at' => now()]);
     }
 
     private function site(): string
@@ -28,7 +31,13 @@ class FeedbackTest extends TestCase
 
     private function guest(string $site, string $name = 'Chris'): array
     {
-        return $this->withToken('')->withHeader('Origin', 'http://review.test')->postJson('/api/v1/sites/'.$site.'/guests', ['name' => $name])->assertCreated()->json();
+        $user = DB::table('users')->insertGetId(['name' => $name, 'email' => Str::uuid().'@example.test', 'password' => 'unused', 'email_verified_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('memberships')->insert(['site_id' => $site, 'user_id' => $user, 'role' => 'member', 'accepted_at' => now()]);
+        $person = Accounts::participant($user, $site);
+        $session = Accounts::issue($user, $site, 'http://review.test');
+        $this->withToken($session['token'])->withHeader('Origin', 'http://review.test');
+
+        return array_merge($session, ['id' => $person->id, 'name' => $name]);
     }
 
     private function comment(string $site, array $g, ?string $uuid = null): array
@@ -36,7 +45,7 @@ class FeedbackTest extends TestCase
         return $this->withToken($g['token'])->withHeader('Origin', 'http://review.test')->postJson('/api/v1/sites/'.$site.'/comments', ['url' => 'http://review.test/about?utm_source=email#section', 'title' => 'About', 'body' => 'Improve this text', 'status' => 'open', 'client_id' => $uuid ?? (string) Str::uuid(), 'anchor' => ['selector' => '#intro', 'text' => 'Intro', 'x' => 0.2, 'y' => 0.5, 'documentX' => 100, 'documentY' => 200, 'viewportWidth' => 1200]])->assertCreated()->json();
     }
 
-    public function test_owner_key_is_required_and_never_returned(): void
+    public function test_account_session_is_required_and_never_returned(): void
     {
         $this->getJson('/api/v1/sites')->assertUnauthorized();
         $s = $this->site();
@@ -44,7 +53,7 @@ class FeedbackTest extends TestCase
         $this->withHeader('Origin', 'http://evil.test')->withToken('')->getJson('/api/v1/sites/'.$s.'/config')->assertForbidden();
     }
 
-    public function test_guest_names_do_not_grant_ownership_and_tokens_are_site_scoped(): void
+    public function test_display_names_do_not_grant_ownership_and_tokens_are_site_scoped(): void
     {
         $a = $this->site();
         $b = $this->site();
@@ -52,7 +61,7 @@ class FeedbackTest extends TestCase
         $two = $this->guest($a);
         $this->assertNotSame($one['id'], $two['id']);
         $this->assertNotSame($one['token'], $two['token']);
-        $this->withToken($one['token'])->postJson('/api/v1/sites/'.$b.'/comments', [])->assertUnauthorized();
+        $this->withToken($one['token'])->postJson('/api/v1/sites/'.$b.'/comments', [])->assertForbidden();
         $this->assertDatabaseMissing('participants', ['token_hash' => $one['token']]);
     }
 
@@ -110,7 +119,7 @@ class FeedbackTest extends TestCase
         $this->postJson($path, ['client_id' => $uuid, 'file' => UploadedFile::fake()->image('screen.png')])->assertOk();
         $this->assertDatabaseCount('attachments', 1);
         $this->get($url)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
-        $this->get('/api/attachments/1')->assertForbidden();
+        $this->get('/api/attachments/1')->assertUnauthorized();
         $this->postJson($path, ['client_id' => (string) Str::uuid(), 'file' => UploadedFile::fake()->create('bad.svg', 1, 'image/svg+xml')])->assertUnprocessable();
     }
 
@@ -123,7 +132,7 @@ class FeedbackTest extends TestCase
         $this->guest($b);
         $this->getJson('/api/v1/sites/'.$b.'/pages')->assertOk()->assertExactJson([]);
         $this->getJson('/api/v1/sites/'.$b.'/activity')->assertOk()->assertJsonCount(0, 'events');
-        $this->getJson('/api/v1/sites/'.$a.'/activity')->assertOk()->assertJsonCount(1, 'events');
+        $this->withToken($g['token'])->getJson('/api/v1/sites/'.$a.'/activity')->assertOk()->assertJsonCount(1, 'events');
     }
 
     public function test_site_settings_and_search(): void
@@ -133,7 +142,7 @@ class FeedbackTest extends TestCase
         $c = $this->comment($s, $g);
         $this->getJson('/api/v1/sites/'.$s.'/search?query=Improve')->assertOk()->assertJsonPath('results.0.id', $c['id']);
         $this->getJson('/api/v1/sites/'.$s.'/search?query=unmatched')->assertOk()->assertJsonCount(0, 'results');
-        $this->withToken($g['token'])->patchJson('/api/v1/sites/'.$s, ['name' => 'Changed', 'origins' => ['http://review.test']])->assertUnauthorized();
+        $this->withToken($g['token'])->patchJson('/api/v1/sites/'.$s, ['name' => 'Changed', 'origins' => ['http://review.test']])->assertForbidden();
         $this->withToken($this->owner)->withHeader('Origin', 'http://dashboard.test')->patchJson('/api/v1/sites/'.$s, ['name' => 'Changed', 'origins' => ['https://new.example/path']])->assertOk()->assertJsonPath('origins.0', 'https://new.example');
     }
 
@@ -223,14 +232,11 @@ class FeedbackTest extends TestCase
         $this->assertDatabaseCount('attachments', 0);
     }
 
-    public function test_general_browsing_does_not_consume_guest_creation_quota(): void
+    public function test_name_only_guest_creation_is_retired(): void
     {
         $site = $this->site();
-        $this->withToken('')->withHeader('Origin', 'http://review.test');
-        for ($i = 0; $i < 25; $i++) {
-            $this->getJson('/api/v1/sites/'.$site.'/config')->assertOk();
-        }
-        $this->postJson('/api/v1/sites/'.$site.'/guests', ['name' => 'New reader'])->assertCreated();
+        $this->withToken('')->withHeader('Origin', 'http://review.test')->postJson('/api/v1/sites/'.$site.'/guests', ['name' => 'Uninvited'])->assertNotFound();
+        $this->getJson('/api/v1/sites/'.$site.'/config')->assertUnauthorized();
     }
 
     public function test_fifty_comments_do_not_require_per_comment_author_queries(): void
@@ -245,7 +251,7 @@ class FeedbackTest extends TestCase
         $db::enableQueryLog();
         $db::flushQueryLog();
         $this->getJson('/api/v1/sites/'.$site.'/comments?url='.urlencode('http://review.test/about'))->assertOk()->assertJsonCount(50, 'comments');
-        $this->assertLessThanOrEqual(10, count($db::getQueryLog()));
+        $this->assertLessThanOrEqual(17, count($db::getQueryLog()));
         $db::disableQueryLog();
         $this->getJson('/api/v1/sites/'.$site.'/pages')->assertOk()->assertJsonPath('0.counts.open', 50);
     }

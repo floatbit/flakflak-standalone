@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Accounts;
 use App\Support\PageUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -19,22 +19,25 @@ class FeedbackController extends Controller
         return ['status' => 'ok', 'api_version' => 'v1'];
     }
 
-    public function sites()
+    public function sites(Request $r)
     {
-        return DB::table('sites')->orderBy('created_at', 'desc')->get()->map(fn ($s) => $this->siteData($s));
+        return DB::table('sites')->whereIn('id', DB::table('memberships')->where('user_id', $r->attributes->get('account')->id)->select('site_id'))->orderBy('created_at', 'desc')->get()->map(fn ($s) => $this->siteData($s));
     }
 
     private function siteData($s): array
     {
-        return ['id' => $s->id, 'name' => $s->name, 'origins' => json_decode($s->origins, true), 'embed_url' => config('flakflak.embed_url')];
+        return ['id' => $s->id, 'name' => $s->name, 'origins' => json_decode($s->origins, true), 'embed_url' => config('flakflak.embed_url'), 'feedback_version' => (int) $s->feedback_version, 'role' => Accounts::member((int) request()->attributes->get('account')?->id, $s->id)?->role, 'participant_id' => request()->attributes->get('participant')?->id];
     }
 
     public function createSite(Request $r)
     {
+        abort_unless(trim($r->attributes->get('account')->name) !== '', 422, 'Enter your display name first.');
         $v = $r->validate(['name' => 'required|string|max:100', 'origins' => 'required|array|min:1|max:20', 'origins.*' => 'required|string|max:500']);
         $origins = array_values(array_unique(array_map(fn ($o) => PageUrl::origin($o), $v['origins'])));
         $id = (string) Str::uuid();
         DB::table('sites')->insert(['id' => $id, 'name' => $v['name'], 'origins' => json_encode($origins), 'created_at' => now(), 'updated_at' => now()]);
+
+        DB::table('memberships')->insert(['site_id' => $id, 'user_id' => $r->attributes->get('account')->id, 'role' => 'owner', 'accepted_at' => now()]);
 
         return response()->json($this->siteData(DB::table('sites')->find($id)), 201);
     }
@@ -42,16 +45,6 @@ class FeedbackController extends Controller
     public function site(Request $r)
     {
         return $this->siteData($r->attributes->get('site'));
-    }
-
-    public function guest(Request $r, string $site)
-    {
-        $v = $r->validate(['name' => 'required|string|max:100']);
-        $token = Str::random(64);
-        $id = (string) Str::uuid();
-        DB::table('participants')->insert(['id' => $id, 'site_id' => $site, 'name' => $v['name'], 'token_hash' => hash('sha256', $token), 'expires_at' => now()->addDays(90), 'created_at' => now(), 'updated_at' => now()]);
-
-        return response()->json(['id' => $id, 'name' => $v['name'], 'token' => $token, 'expires_at' => now()->addDays(90)->toISOString()], 201);
     }
 
     private function pageUrl(Request $r, string $url): string
@@ -144,7 +137,7 @@ class FeedbackController extends Controller
             $query->limit(2);
         }
         $replies = $query->orderByDesc('replies.id')->get(['replies.id', 'replies.participant_id', 'participants.name', 'replies.body', 'replies.kind', 'replies.created_at'])->reverse()->values();
-        $files = DB::table('attachments')->where('comment_id', $c->id)->get()->map(fn ($f) => ['id' => $f->id, 'name' => $f->name, 'mime' => $f->mime, 'size' => $f->size, 'participant_id' => $f->participant_id, 'url' => URL::temporarySignedRoute('attachment', now()->addHours(2), ['attachment' => $f->id])]);
+        $files = DB::table('attachments')->where('comment_id', $c->id)->get()->map(fn ($f) => ['id' => $f->id, 'name' => $f->name, 'mime' => $f->mime, 'size' => $f->size, 'participant_id' => $f->participant_id, 'url' => rtrim(config('app.url'), '/').'/api/v1/sites/'.$site.'/attachments/'.$f->id]);
 
         return ['comment' => $this->commentData($c), 'replies' => $replies, 'reply_count' => $count, 'reply_before' => $count > $replies->count() ? $replies->first()?->id : null, 'latest_activity_id' => $snapshot, 'attachments' => $files];
     }
@@ -213,12 +206,12 @@ class FeedbackController extends Controller
         return $this->detail($r, $site, $comment);
     }
 
-    public function attachment(string $attachment)
+    public function attachment(Request $r, string $site, string $attachment)
     {
-        $f = DB::table('attachments')->find($attachment);
+        $f = DB::table('attachments')->join('comments', 'comments.id', '=', 'attachments.comment_id')->where('comments.site_id', $site)->where('attachments.id', $attachment)->select('attachments.*')->first();
         abort_unless($f && Storage::disk('local')->exists($f->path), 404);
 
-        return response()->file(Storage::disk('local')->path($f->path), ['Content-Type' => $f->mime, 'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, max-age=300', 'Content-Security-Policy' => "default-src 'none'; media-src 'self'; sandbox"]);
+        return response()->file(Storage::disk('local')->path($f->path), ['Content-Type' => $f->mime, 'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store', 'Content-Security-Policy' => "default-src 'none'; media-src 'self'; sandbox"]);
     }
 
     public function pages(string $site)
@@ -254,6 +247,7 @@ class FeedbackController extends Controller
 
     public function updateSite(Request $r, string $site)
     {
+        MembershipController::owner($r, $site);
         $v = $r->validate(['name' => 'required|string|max:100', 'origins' => 'required|array|min:1|max:20', 'origins.*' => 'required|string|max:500']);
         abort_unless(DB::table('sites')->where('id', $site)->exists(), 404);
         DB::table('sites')->where('id', $site)->update(['name' => $v['name'], 'origins' => json_encode(array_values(array_unique(array_map(fn ($o) => PageUrl::origin($o), $v['origins'])))), 'updated_at' => now()]);

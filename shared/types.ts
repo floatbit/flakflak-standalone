@@ -4,12 +4,17 @@ export interface Site {
   name: string;
   origins: string[];
   embed_url: string;
+  role?: "owner" | "member";
+  feedback_version?: number;
+  participant_id?: string;
 }
-export interface Guest {
+export interface WidgetSession {
   id: string;
   name: string;
   token: string;
   expires_at: string;
+  user_id?: number;
+  role?: "owner" | "member";
 }
 export interface Anchor {
   selector: string;

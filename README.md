@@ -25,12 +25,7 @@ cd ..
 npm run build
 ```
 
-Local MySQL uses `flakflak_local`. Its local-only credentials and MAMP socket
-are in `api/.env`, not in Git. `FLAKFLAK_OWNER_KEY` is a random private key in
-that same file: paste its value into the dashboard to manage sites. The key is
-kept in tab memory, never added to widget code. Reviewer access is name-only.
-For a fresh setup generate APP_KEY using `php artisan key:generate` and an owner
-key using `php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'`.
+Local MySQL uses `flakflak_local`. Credentials and the MAMP socket stay in ignored `api/.env`. Set `MAIL_MAILER=log` and `LOG_LEVEL=debug` for local magic-link email; read messages with `tail -f api/storage/logs/laravel.log`. Generate APP_KEY with `php artisan key:generate` for a fresh setup. Owner-key and name-only access are retired.
 
 Set these MAMP document roots and select **PHP 8.2 for the API host**. Where MAMP provides separate Site folder and Document root controls, set the API Site folder to `flakflak/api` and select `public` as its Document root subfolder so PHP retains access to framework files above public:
 
@@ -48,25 +43,18 @@ when using alternative ports. Nothing is deployed by a local build or Git push.
 
 ## Try it
 
-1. Open `http://app-flakflak.localhost` and enter the owner key from `api/.env`.
-2. Select **Local demo workspace** (created by the local-only seeder).
-3. Open `http://app-flakflak.localhost/demo.html?site=6d19cd1e-9651-4c3b-96c9-6052ec752f21`.
-4. Shift + click page content, enter a name, and save a comment. Add a reply or file.
-5. Open `http://embed-flakflak.localhost/demo.html?site=6d19cd1e-9651-4c3b-96c9-6052ec752f21`
-   to test a second origin. Page lists and progress are site-wide; dots belong to
-   the specific page. Guest identities are independently stored per host origin.
-6. Create another site for WordPress or Drupal, enter its exact allowed origin
-   (scheme, host, and port), and copy the generated embed snippet into that site.
+1. Open `http://app-flakflak.localhost`, request an email sign-in link, open it from the local mail log, and click Confirm sign-in.
+2. Set your display name. Create a site, or claim the local demo after signing in: `cd api && php artisan flakflak:claim your@email.example` (use MAMP PHP 8.2 on this machine).
+3. Add the dashboard and embed demo origins to the site's allowed addresses, then open its demo from the dashboard.
+4. Shift-click page content, sign in through the popup, click Connect widget, and save a comment. Add a reply or file.
+5. Open the demo from the second origin to test a separate site-scoped widget session.
+6. In the owner's Members section invite a second email, copy its invitation link, and accept with a different browser profile. Registration alone does not grant site access.
+7. Create another site for WordPress or Drupal and copy its generated embed snippet into the allowed website.
 
 The widget does not rely on host jQuery, Vue, or CSS. It uses Shadow DOM for its
 UI and DOM anchors for dots. Missing targets fall back to saved document
 coordinates. Cross-origin iframe contents require their own installation.
-Names are display labels, never credentials; each guest gets a site-scoped token
-stored as a hash on the server. Guest sessions last 90 days. Clearing browser
-storage or switching browser/device creates a new guest. Site IDs and domain
-allowlists are not privacy controls; anonymous feedback is readable by callers
-that know the site ID. Rate limits and domain checks limit misuse but do not
-establish a verified identity. Only owner-key requests can manage sites.
+All feedback routes require a verified account and per-site membership. Owners manage site settings and invitations; Members can leave feedback and edit their own contributions. Site IDs and origin allowlists are not credentials. Widget sessions are limited to one site/origin; account sign-in uses a verified popup handoff without third-party cookies. Private attachments are fetched with authentication and rendered as blob URLs. See [Authentication](docs/AUTHENTICATION.md) for permissions, session lifetimes, reset behavior, and production cutover.
 
 ## Tests
 
@@ -83,22 +71,23 @@ files and a temporary API, not your WordPress site. See `docs/TESTING.md`.
 
 See `docs/DEPLOYMENT.md`. The root `deploy.sh` is intended to run over SSH on a
 ServerPilot server after one-time setup. Production credentials, uploads and
-logs live outside releases. There is no Git remote configured yet and no
-production deployment has been performed.
+logs live outside releases. The Git remote is `floatbit/flakflak-standalone`. Production updates are deployed explicitly; pushing alone does not publish them.
 
 ## Implementation status
 
 The core embedded review tools and WordPress reference layout are ported: themes,
 sidebar settings, saturated status dots, comments/replies/files, drafts, unread
 tracking, review navigation, target movement/reattachment and ownership actions.
-Select **Midnight** in Settings for the blue appearance in the WordPress reference
-screenshots; Graphite remains the default, and existing personal choices are kept.
+Graphite is the default. The retained palette and classic themes share the same review workflows.
 
 New widgets request `reply_limit=2` for thread responses. The API retains its
 original complete response for older loaded widgets, while exposing cursor-based
-older-reply pages to new builds. This avoids forcing open pages to refresh during
-an update.
+older-reply pages to new builds. The email-account cutover intentionally blocks old guest-based widgets and requires a page reload.
 
-See `CHECKLIST.md` for the optional WordPress importer, later account features,
+See `CHECKLIST.md` for remaining deployment
 and production/CMS/device verification still needed. The existing WordPress
 plugin and its database remain independent and unchanged.
+
+## Private email accounts
+
+The standalone app now requires verified email accounts and per-site invitations. Email magic links replace the owner-key dashboard and name-only widget. See [Authentication and rollout](docs/AUTHENTICATION.md) for local mail-log testing, invitations, reset behavior, and the ServerPilot ownership cutover. Existing accounts/sites are not reset by deployment.

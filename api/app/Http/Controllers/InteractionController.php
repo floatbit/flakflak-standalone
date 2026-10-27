@@ -11,11 +11,7 @@ class InteractionController extends Controller
 {
     public static function participant(Request $r, string $site): ?object
     {
-        if (! $r->bearerToken()) {
-            return null;
-        }
-
-        return DB::table('participants')->where('site_id', $site)->where('token_hash', hash('sha256', $r->bearerToken()))->where('expires_at', '>', now())->first();
+        return $r->attributes->get('participant');
     }
 
     private function comment(string $site, string $comment, bool $lock = false): object
@@ -30,7 +26,7 @@ class InteractionController extends Controller
 
     private function owner(Request $r, object $item): void
     {
-        abort_unless($item->participant_id === $r->attributes->get('participant')->id, 403, 'Only the contributor can change this item.');
+        abort_unless(($item->participant_id === $r->attributes->get('participant')->id || $r->attributes->get('membership')?->role === 'owner'), 403, 'Only the contributor can change this item.');
     }
 
     private function event(string $site, int $comment, string $participant, string $type, string $summary): void

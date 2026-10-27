@@ -16,8 +16,7 @@
    COMPOSER_BIN must point to the Composer PHP executable/PHAR. Configure a real
    BACKUP_COMMAND: its successful exit must mean a recoverable backup exists.
 6. Create DEPLOY_ROOT/shared/api.env from api/.env.production.example. Fill in
-   database details, a generated Laravel APP_KEY, and a random owner key (32+
-   characters). Keep APP_DEBUG=false. Set file permissions to owner-only (600).
+   database details, a generated Laravel APP_KEY, and production SMTP/sender credentials. Keep APP_DEBUG=false. Set file permissions to owner-only (600).
 7. Move each app's initial public placeholder directory aside. The script creates
    public symlinks to release subdirectories. It refuses to replace a real public
    directory automatically. App paths and their parents must be writable by the
@@ -57,3 +56,7 @@ with a reviewed recovery plan. Never run migrate:rollback blindly in production.
 This repository provides deployment tooling; real ServerPilot paths, SSL,
 symlink permissions, backup behavior, PHP-FPM caching and rollback still require
 staging verification before a public launch. No production connection has been made.
+
+## Email-account cutover
+
+Read [AUTHENTICATION.md](AUTHENTICATION.md) before deploying the account release. Configure production email before deployment, sign in with your owner email, claim legacy sites with `flakflak:claim`, and reset old feedback explicitly. The former owner key and guest sessions are retired. Private media now requires membership. Configure COMPOSER_BIN with the real PHAR (on ServerPilot `/opt/sp/bin/composer.phar`), not `/usr/bin/composer`, which may be a shell wrapper.

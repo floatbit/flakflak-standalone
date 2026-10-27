@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { seedAccount } from "./accounts";
+import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import fs from "node:fs/promises";
 import path from "node:path";
 async function openSidebar(page: Page) {
@@ -14,15 +15,8 @@ const apiOrigin = "http://api-flakflak.localhost",
 const backend = process.env.E2E_BACKEND || "http://127.0.0.1:8081";
 let key = "",
   siteId = "";
-test.beforeAll(async ({ request }) => {
-  const env = await fs.readFile(path.join(root, "api/.env"), "utf8");
-  key = env.match(/^FLAKFLAK_OWNER_KEY=(.+)$/m)![1];
-  const res = await request.post(backend + "/api/v1/sites", {
-    headers: { Origin: appOrigin, Authorization: "Bearer " + key },
-    data: { name: "Browser test workspace", origins: [appOrigin, embedOrigin] },
-  });
-  expect(res.ok()).toBeTruthy();
-  siteId = (await res.json()).id;
+test.beforeAll(async () => {
+  key = seedAccount({ name: "Owner" }).token;
 });
 test.beforeEach(async ({ page, request, context, browserName }) => {
   if (browserName === "chromium")
@@ -42,6 +36,47 @@ test.beforeEach(async ({ page, request, context, browserName }) => {
   });
   expect(setup.ok()).toBeTruthy();
   siteId = (await setup.json()).id;
+  const member = seedAccount({
+    name: "Browser tester",
+    site: siteId,
+    origin: appOrigin,
+  });
+  const other = seedAccount({
+    user: member.user_id,
+    site: siteId,
+    origin: embedOrigin,
+  });
+  await context.addInitScript(
+    ({ site, member, other, app, embed, owner }) => {
+      if (
+        location.origin === app &&
+        !localStorage.getItem("flakflak:member:" + site)
+      )
+        localStorage.setItem("flakflak:member:" + site, JSON.stringify(member));
+      if (
+        location.origin === embed &&
+        !localStorage.getItem("flakflak:member:" + site)
+      )
+        localStorage.setItem("flakflak:member:" + site, JSON.stringify(other));
+      if (location.origin === app)
+        localStorage.setItem(
+          "flakflak:account",
+          JSON.stringify({
+            token: owner,
+            expires_at: new Date(Date.now() + 86400000).toISOString(),
+          }),
+        );
+    },
+    {
+      site: siteId,
+      member,
+      other,
+      app: appOrigin,
+      embed: embedOrigin,
+      owner: key,
+    },
+  );
+
   await page.route(
     /^http:\/\/(api|app|embed)-flakflak\.localhost\//,
     async (route) => {
@@ -99,8 +134,7 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(appOrigin);
-  await page.getByLabel("Owner key").fill(key);
-  await page.getByRole("button", { name: "Open dashboard" }).click();
+
   await expect(
     page.getByText("Browser test workspace", { exact: true }).first(),
   ).toBeVisible();
@@ -111,10 +145,6 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   await page
     .locator("#intro p")
     .click({ modifiers: ["Shift"], position: { x: 60, y: 12 } });
-  await page
-    .getByRole("textbox", { name: "Your name", exact: true })
-    .fill("Chris");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Comment", exact: true })
     .fill("Check the introductory paragraph");
@@ -345,12 +375,11 @@ test("settings persist, stay isolated from the host page, and fit review navigat
   request,
 }) => {
   const origin = { Origin: appOrigin };
-  const guestResponse = await request.post(
-    backend + "/api/v1/sites/" + siteId + "/guests",
-    { headers: origin, data: { name: "Settings tester" } },
-  );
-  expect(guestResponse.status()).toBe(201);
-  const person = await guestResponse.json();
+  const person = seedAccount({
+    site: siteId,
+    origin: appOrigin,
+    name: "Settings tester",
+  });
   for (const [index, status] of ["open", "content"].entries()) {
     const result = await request.post(
       backend + "/api/v1/sites/" + siteId + "/comments",
@@ -494,10 +523,6 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
     .locator("#intro p")
     .click({ modifiers: ["Shift"], position: { x: 100, y: 10 } });
   await page
-    .getByRole("textbox", { name: "Your name", exact: true })
-    .fill("Port tester");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page
     .getByRole("textbox", { name: "Comment", exact: true })
     .fill("Interaction parity thread");
   await page
@@ -511,7 +536,7 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
     (await dialog.locator(".titlebar strong").innerText()).match(/#(\d+)/)![1],
   );
   const identity = await page.evaluate(
-    (id) => JSON.parse(localStorage.getItem("flakflak:guest:" + id)!),
+    (id) => JSON.parse(localStorage.getItem("flakflak:member:" + id)!),
     siteId,
   );
   const headers = {
@@ -733,12 +758,7 @@ test("unread activity is preserved until a thread is opened, survives reload, an
   const origin = { Origin: appOrigin },
     prefix = "/api/v1/sites/" + siteId;
   const createGuest = async (name: string) =>
-    (
-      await request.post(backend + prefix + "/guests", {
-        headers: origin,
-        data: { name },
-      })
-    ).json();
+    seedAccount({ site: siteId, origin: appOrigin, name });
   const author = await createGuest("Author"),
     reader = await createGuest("Reader");
   const auth = { ...origin, Authorization: "Bearer " + author.token },
@@ -766,7 +786,7 @@ test("unread activity is preserved until a thread is opened, survives reload, an
   const id = (await created.json()).id;
   await page.addInitScript(
     ({ site, person }) =>
-      localStorage.setItem("flakflak:guest:" + site, JSON.stringify(person)),
+      localStorage.setItem("flakflak:member:" + site, JSON.stringify(person)),
     { site: siteId, person: reader },
   );
   await page.goto(appOrigin + "/demo.html?site=" + siteId);
@@ -854,10 +874,6 @@ test("new-dot dragging and keyboard movement preserve page-specific recoverable 
     .locator("#intro p")
     .click({ modifiers: ["Shift"], position: { x: 90, y: 10 } });
   await page
-    .getByRole("textbox", { name: "Your name", exact: true })
-    .fill("Draft tester");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page
     .getByRole("textbox", { name: "Comment", exact: true })
     .fill("A draft that must survive moving its dot");
   await page.getByLabel("Attach files", { exact: true }).setInputFiles({
@@ -887,10 +903,16 @@ test("new-dot dragging and keyboard movement preserve page-specific recoverable 
   await dot.focus();
   await dot.press("ArrowRight");
   const moved = await dot.boundingBox();
+  await expect(
+    page.getByText("Draft saved in this browser", { exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("dialog", { name: "Comment", exact: true })
     .getByRole("button", { name: "Close", exact: true })
     .click();
+  await expect(
+    page.getByRole("dialog", { name: "Comment", exact: true }),
+  ).toBeHidden();
   await page.reload();
   await openSidebar(page);
   await page
@@ -939,12 +961,11 @@ test.describe("WordPress reference appearance", () => {
   }) => {
     const origin = { Origin: appOrigin },
       prefix = "/api/v1/sites/" + siteId;
-    const person = await (
-      await request.post(backend + prefix + "/guests", {
-        headers: origin,
-        data: { name: "Harry" },
-      })
-    ).json();
+    const person = seedAccount({
+      site: siteId,
+      origin: appOrigin,
+      name: "Harry",
+    });
     const headers = { ...origin, Authorization: "Bearer " + person.token };
     let openId = 0;
     for (let i = 0; i < 4; i++) {
@@ -978,7 +999,7 @@ test.describe("WordPress reference appearance", () => {
     }
     await page.addInitScript(
       ({ site, person }) => {
-        localStorage.setItem("flakflak:guest:" + site, JSON.stringify(person));
+        localStorage.setItem("flakflak:member:" + site, JSON.stringify(person));
         localStorage.setItem(
           "flakflak:preferences:" + site,
           JSON.stringify({
@@ -1131,4 +1152,260 @@ test("Shift placement cursor resets when released", async ({ page }) => {
   await expect(page.locator("#intro p")).toHaveCSS("cursor", "crosshair");
   await page.keyboard.up("Shift");
   await expect(page.locator("#intro p")).not.toHaveCSS("cursor", "crosshair");
+});
+
+async function bindAccountPages(context: BrowserContext) {
+  await context.route(
+    /^http:\/\/(api|app|embed)-flakflak\.localhost\//,
+    async (route) => {
+      const url = new URL(route.request().url());
+      if (url.origin === apiOrigin) {
+        const response = await route.fetch({
+          url: backend + url.pathname + url.search,
+          headers: { ...route.request().headers(), host: url.host },
+        });
+        await route.fulfill({ response });
+        return;
+      }
+      const folder = url.origin === appOrigin ? "app/dist" : "embed/dist";
+      const file = path.resolve(
+        root,
+        folder,
+        "." + (url.pathname === "/" ? "/index.html" : url.pathname),
+      );
+      if (!file.startsWith(path.resolve(root, folder) + path.sep)) {
+        await route.abort();
+        return;
+      }
+      try {
+        let body = await fs.readFile(file);
+        if (url.pathname === "/widget.js")
+          body = Buffer.concat([
+            Buffer.from(
+              "document.currentScript.dataset.apiUrl=" +
+                JSON.stringify(backend + "/api/v1") +
+                ";",
+            ),
+            body,
+          ]);
+        await route.fulfill({
+          body,
+          contentType: file.endsWith(".js")
+            ? "application/javascript"
+            : file.endsWith(".css")
+              ? "text/css"
+              : "text/html",
+        });
+      } catch {
+        await route.fulfill({ status: 404, body: "Missing test asset" });
+      }
+    },
+  );
+}
+async function localMagicLinks() {
+  const log = await fs
+    .readFile(path.join(root, "api/storage/logs/laravel.log"), "utf8")
+    .catch(() => "");
+  const decoded = log.replace(/=\r?\n/g, "").replace(/=3D/gi, "=");
+  return Array.from(
+    decoded.matchAll(
+      /http:\/\/app-flakflak\.localhost\/#[^\s<>]+magic=[^\s<>]+|http:\/\/app-flakflak\.localhost\/#magic=[^\s<>]+/g,
+    ),
+    (match) => match[0],
+  );
+}
+
+test("email registration, copied invitation, acceptance and member removal work across accounts", async ({
+  page,
+  browser,
+  browserName,
+  request,
+}) => {
+  await page.goto(appOrigin);
+  await page.locator('.site-row[data-site-id="' + siteId + '"]').click();
+  const invited = "member-" + crypto.randomUUID() + "@example.test";
+  await page.getByLabel("Invite by email").fill(invited);
+  await page
+    .getByRole("button", { name: "Send invitation", exact: true })
+    .click();
+  const row = page.locator(".member-row").filter({ hasText: invited });
+  await expect(row.getByText(/Pending/)).toBeVisible();
+  const inviteUrl = await row.getByLabel("Invitation link").inputValue();
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          sessionStorage.setItem("copied-invitation", text);
+        },
+      },
+    }),
+  );
+  await row
+    .getByRole("button", { name: "Copy invitation link", exact: true })
+    .click();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("copied-invitation")),
+  ).toBe(inviteUrl);
+  const memberContext = await browser.newContext();
+  if (browserName === "chromium")
+    await memberContext.grantPermissions(["local-network-access"], {
+      origin: appOrigin,
+    });
+  await bindAccountPages(memberContext);
+  const member = await memberContext.newPage();
+  await member.goto(inviteUrl);
+  await expect(
+    member.getByRole("heading", {
+      name: "Invitation to Browser test workspace",
+    }),
+  ).toBeVisible();
+  await expect(member.getByLabel("Email address")).toHaveValue(invited);
+  const before = (await localMagicLinks()).length;
+  await member
+    .getByRole("button", { name: "Email me a sign-in link", exact: true })
+    .click();
+  await expect(member.getByRole("status")).toContainText("Check your email");
+  await expect
+    .poll(async () => (await localMagicLinks()).length)
+    .toBeGreaterThan(before);
+  const magic = (await localMagicLinks()).at(-1)!;
+  const emailTab = await memberContext.newPage();
+  await emailTab.goto(magic);
+  await emailTab
+    .getByRole("button", { name: "Confirm sign-in", exact: true })
+    .click();
+  await emailTab.getByLabel("Display name").fill("Invited member");
+  await emailTab
+    .getByRole("button", { name: "Save profile", exact: true })
+    .click();
+  await expect(
+    emailTab.getByRole("button", { name: "Accept invitation", exact: true }),
+  ).toBeVisible();
+  // Verifying email is not accepting membership.
+  const pending = await request.get(
+    backend + "/api/v1/sites/" + siteId + "/members",
+    { headers: { Origin: appOrigin, Authorization: "Bearer " + key } },
+  );
+  expect((await pending.json()).invitations).toHaveLength(1);
+  await emailTab
+    .getByRole("button", { name: "Accept invitation", exact: true })
+    .click();
+  await expect(emailTab.getByRole("status")).toContainText(
+    "Invitation accepted",
+  );
+  await page.locator('.site-row[data-site-id="' + siteId + '"]').click();
+  const accepted = page.locator(".member-row").filter({ hasText: invited });
+  await expect(accepted).toContainText("Accepted");
+  await expect(
+    accepted.getByRole("button", { name: "Copy invitation link" }),
+  ).toHaveCount(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await accepted
+    .getByRole("button", { name: "Remove member", exact: true })
+    .click();
+  await expect(accepted).toHaveCount(0);
+  await emailTab.reload();
+  await expect(
+    emailTab.getByText(
+      "No sites yet. Accept an invitation or create your own site.",
+    ),
+  ).toBeVisible();
+  await memberContext.unrouteAll({ behavior: "ignoreErrors" });
+  await memberContext.close();
+});
+
+test("widget connects through an authenticated popup and reset clears recovered drafts", async ({
+  page,
+  context,
+  request,
+}) => {
+  await bindAccountPages(context);
+  await page.goto(appOrigin + "/demo.html?site=" + siteId);
+  await openSidebar(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Sign out of this site", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await page
+    .locator("#intro p")
+    .click({ modifiers: ["Shift"], position: { x: 80, y: 10 } });
+  const signIn = page.getByRole("dialog", {
+    name: "Sign in to FlakFlak",
+    exact: true,
+  });
+  await expect(signIn).toBeVisible();
+  const popupPromise = page.waitForEvent("popup");
+  await signIn.getByRole("button", { name: "Sign in", exact: true }).click();
+  const popup = await popupPromise;
+  await popup
+    .getByRole("button", { name: "Connect widget", exact: true })
+    .click();
+  await expect(signIn).toHaveCount(0);
+  await page
+    .getByRole("textbox", { name: "Comment", exact: true })
+    .fill("Draft to reset");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6x8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  await page
+    .getByLabel("Attach files", { exact: true })
+    .setInputFiles({ name: "reset.png", mimeType: "image/png", buffer: png });
+  await expect(page.getByRole("img", { name: "reset.png" })).toBeVisible();
+  const reset = await request.post(
+    backend + "/api/v1/sites/" + siteId + "/reset-feedback",
+    {
+      headers: { Origin: appOrigin, Authorization: "Bearer " + key },
+      data: { confirmation: "Browser test workspace" },
+    },
+  );
+  expect(reset.ok()).toBeTruthy();
+  await page.reload();
+  await expect(
+    page.getByText(
+      "Feedback was reset by the site owner. Previous drafts were cleared.",
+    ),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      (site) =>
+        Object.keys(localStorage).filter((key) =>
+          key.startsWith("flakflak:draft:" + site + ":"),
+        ),
+      siteId,
+    ),
+  ).toEqual([]);
+  await openSidebar(page);
+  await expect(
+    page.getByRole("button", { name: "Resume new comment draft", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("owner can delete a pending invitation and its copied link stops working", async ({
+  page,
+  request,
+}) => {
+  await page.goto(appOrigin);
+  await page.locator('.site-row[data-site-id="' + siteId + '"]').click();
+  const email = "delete-" + crypto.randomUUID() + "@example.test";
+  await page.getByLabel("Invite by email").fill(email);
+  await page
+    .getByRole("button", { name: "Send invitation", exact: true })
+    .click();
+  const row = page.locator(".member-row").filter({ hasText: email });
+  const url = await row.getByLabel("Invitation link").inputValue();
+  await row
+    .getByRole("button", { name: "Delete invitation", exact: true })
+    .click();
+  await expect(row).toHaveCount(0);
+  const raw = new URLSearchParams(new URL(url).hash.slice(1)).get("invitation");
+  const response = await request.post(backend + "/api/v1/invitations/preview", {
+    headers: { Origin: appOrigin },
+    data: { token: raw },
+  });
+  expect(response.status()).toBe(422);
 });

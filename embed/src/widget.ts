@@ -1,10 +1,14 @@
-import { readDraftFiles, writeDraftFiles } from "./draft-files";
+import {
+  readDraftFiles,
+  writeDraftFiles,
+  clearDraftFiles,
+} from "./draft-files";
 import { api, json, readStored, store, ApiError } from "../../shared/api";
 import type {
   Anchor,
   Attachment,
   Comment,
-  Guest,
+  WidgetSession,
   Page,
   Reply,
   Status,
@@ -120,8 +124,8 @@ function start(siteId: string, base: string) {
     comments: Comment[] = [],
     pages: Page[] = [],
     thread: Thread | null = null;
-  const identityKey = "flakflak:guest:" + siteId;
-  let guest = readStored<Guest | null>(identityKey, null);
+  const identityKey = "flakflak:member:" + siteId;
+  let guest = readStored<WidgetSession | null>(identityKey, null);
   if (
     guest &&
     (typeof guest.id !== "string" ||
@@ -214,7 +218,8 @@ function start(siteId: string, base: string) {
   panel.setAttribute("aria-label", "Comment");
   const launch = button(
     "FlakFlak · Feedback",
-    () => {
+    async () => {
+      await ensureMember();
       setSidebarOpen(!sidebarOpen);
     },
     "launcher",
@@ -222,6 +227,11 @@ function start(siteId: string, base: string) {
   launch.setAttribute("aria-label", "FlakFlak · Feedback");
   shadow.append(dots, sidebar, panel, launch);
   function request<T>(path: string, options: RequestInit = {}) {
+    if (options.method && options.method !== "GET" && site?.feedback_version) {
+      const headers = new Headers(options.headers);
+      headers.set("X-Feedback-Version", String(site.feedback_version));
+      options = { ...options, headers };
+    }
     return api<T>(
       base,
       sitePath + path + (path.includes("?") ? "&" : "?") + "reply_limit=2",
@@ -231,9 +241,22 @@ function start(siteId: string, base: string) {
   }
   function showError(error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    if (error instanceof ApiError && error.status === 401) {
+    if (
+      error instanceof ApiError &&
+      (error.status === 401 || error.status === 403)
+    ) {
       guest = null;
       store(identityKey, null);
+      comments = [];
+      pages = [];
+      events = [];
+      thread = null;
+      activeAnchor = null;
+      clearMedia();
+      dots.replaceChildren();
+      panel.classList.add("hide");
+      sidebar.classList.add("hide");
+      sidebarOpen = false;
     }
     const box = el("div", message, "float-note");
     box.setAttribute("role", "alert");
@@ -302,88 +325,208 @@ function start(siteId: string, base: string) {
       syncBusyControls();
     }
   }
-  async function ensureGuest() {
+  let authentication: Promise<void> | null = null;
+  const dashboardUrl =
+    import.meta.env.VITE_DASHBOARD_URL || "http://app-flakflak.localhost";
+  async function ensureMember(): Promise<void> {
     if (guest) return;
-    await new Promise<void>((resolve, reject) => {
+    if (authentication) return authentication;
+    authentication = new Promise<void>((resolve, reject) => {
       const backdrop = el("div", "", "backdrop"),
-        dialog = el("form", "", "name-dialog");
+        dialog = el("section", "", "name-dialog"),
+        body = el("div", "", "body");
       dialog.setAttribute("role", "dialog");
       dialog.setAttribute("aria-modal", "true");
-      dialog.setAttribute("aria-label", "Your name");
-      const body = el("div", "", "body"),
-        input = el("input");
-      input.required = true;
-      input.maxLength = 100;
-      input.autocomplete = "name";
-      input.id = "ff-name";
-      const label = el("label", "Your name");
-      label.htmlFor = input.id;
-      const submit = el("button", "Continue", "primary");
-      submit.type = "submit";
-      const close = () => {
-        backdrop.remove();
+      dialog.setAttribute("aria-label", "Sign in to FlakFlak");
+      let popup: Window | null = null,
+        verifier = "",
+        state = "",
+        complete = false;
+      const manual = el("input"),
+        message = el(
+          "p",
+          "Sign in with your invited email. Only site members can view or leave feedback.",
+        );
+      manual.placeholder = "One-time connection code";
+      manual.setAttribute("aria-label", "Connection code");
+      const cleanup = () => {
+        window.removeEventListener("message", onMessage);
         dialog.remove();
+        backdrop.remove();
       };
-      body.append(
-        el("p", "Enter your name to leave feedback."),
-        label,
-        input,
-        submit,
-      );
-      dialog.append(
-        titlebar("Welcome to FlakFlak", () => {
-          close();
-          reject(new Error("Name entry cancelled."));
-        }),
-        body,
-      );
-      shadow.append(backdrop, dialog);
-      input.focus();
-      dialog.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        if (!input.value.trim()) return;
-        submit.disabled = true;
+      const finish = async (code: string) => {
         try {
-          guest = await request<Guest>("/guests", {
+          if (!verifier)
+            throw Error("Open sign-in first to start a secure connection.");
+          guest = await api<WidgetSession>(base, sitePath + "/auth/exchange", {
             method: "POST",
-            body: json({ name: input.value.trim() }),
+            body: json({ code, verifier }),
           });
-          const persisted = store(identityKey, guest);
-          if (!persisted)
-            showError(
-              "Browser storage is unavailable. Your guest identity will last only for this page visit.",
-            );
-          close();
+          store(identityKey, guest);
+          await load();
+          complete = true;
+          cleanup();
           resolve();
-        } catch (err) {
-          submit.disabled = false;
-          showError(err);
+        } catch (e) {
+          message.textContent = (e as Error).message;
         }
-      });
-      dialog.addEventListener("keydown", (e) => {
+      };
+      const onMessage = (event: MessageEvent) => {
+        if (
+          event.origin !== new URL(dashboardUrl).origin ||
+          event.source !== popup ||
+          event.data?.type !== "flakflak:authorized" ||
+          event.data.state !== state
+        )
+          return;
+        if (typeof event.data.code === "string") void finish(event.data.code);
+      };
+      window.addEventListener("message", onMessage);
+      const open = button(
+        "Sign in",
+        async () => {
+          popup = window.open(
+            "about:blank",
+            "flakflak-sign-in",
+            "popup,width=540,height=740",
+          );
+          verifier = Array.from(
+            crypto.getRandomValues(new Uint8Array(32)),
+            (n) => n.toString(16).padStart(2, "0"),
+          ).join("");
+          state = crypto.randomUUID();
+          const hash = await crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(verifier),
+          );
+          const challenge = Array.from(new Uint8Array(hash), (n) =>
+            n.toString(16).padStart(2, "0"),
+          ).join("");
+          const url = new URL(dashboardUrl);
+          url.searchParams.set("connect", siteId);
+          url.searchParams.set("origin", location.origin);
+          url.searchParams.set("state", state);
+          url.searchParams.set("challenge", challenge);
+          if (popup) popup.location.href = url.href;
+          fallback.href = url.href;
+          fallback.classList.remove("hide");
+          message.textContent =
+            "Complete email sign-in in the FlakFlak window, then click Connect widget. If the email opens another tab, return to that sign-in window afterwards.";
+        },
+        "primary",
+      );
+      const fallback = el("a", "Open sign-in in a new tab", "hide");
+      fallback.target = "_blank";
+      fallback.rel = "noopener";
+      const cancel = () => {
+        if (complete) return;
+        cleanup();
+        reject(Error("Sign-in cancelled."));
+      };
+      dialog.append(titlebar("Sign in to FlakFlak", cancel), body);
+      body.append(
+        message,
+        open,
+        fallback,
+        el(
+          "p",
+          "If your browser blocks the connection, paste the one-time code here.",
+        ),
+        manual,
+        button("Connect", () => finish(manual.value.trim())),
+      );
+      dialog.onkeydown = (e) => {
         if (e.key === "Escape") {
           e.stopPropagation();
-          close();
-          reject(new Error("Name entry cancelled."));
+          cancel();
         }
-        if (e.key === "Tab") {
-          const focusable = Array.from(
-            dialog.querySelectorAll<HTMLElement>("button,input"),
-          );
-          const first = focusable[0],
-            last = focusable.at(-1);
-          if (e.shiftKey && shadow.activeElement === first) {
-            e.preventDefault();
-            last?.focus();
-          } else if (!e.shiftKey && shadow.activeElement === last) {
-            e.preventDefault();
-            first?.focus();
-          }
-        }
-      });
+      };
+      shadow.append(backdrop, dialog);
+      open.focus();
     });
+    try {
+      await authentication;
+    } finally {
+      authentication = null;
+    }
+  }
+  let closeAttachmentViewer: (() => void) | null = null;
+  const privateMedia = new Map<string, Promise<string>>();
+  function clearMedia() {
+    closeAttachmentViewer?.();
+    for (const promise of privateMedia.values())
+      void promise.then((url) => URL.revokeObjectURL(url)).catch(() => {});
+    privateMedia.clear();
+  }
+  function setMediaSource(
+    node: HTMLImageElement | HTMLVideoElement,
+    file: Attachment,
+  ) {
+    const key = (guest?.token || "") + ":" + file.id;
+    if (!privateMedia.has(key))
+      privateMedia.set(
+        key,
+        (async () => {
+          const response = await fetch(file.url, {
+            headers: { Authorization: "Bearer " + guest?.token },
+            credentials: "omit",
+            cache: "no-store",
+          });
+          if (!response.ok)
+            throw new ApiError(
+              "Sign in to view this attachment.",
+              response.status,
+            );
+          return URL.createObjectURL(await response.blob());
+        })(),
+      );
+    void privateMedia
+      .get(key)!
+      .then((url) => {
+        if (node.isConnected) node.src = url;
+        else
+          queueMicrotask(() => {
+            if (node.isConnected) node.src = url;
+          });
+      })
+      .catch(showError);
+  }
+  async function syncSite() {
+    const next = await request<Site>("/config");
+    const versionKey = "flakflak:feedback-version:" + siteId,
+      previous = readStored<number | null>(versionKey, null);
+    if (previous !== null && previous !== next.feedback_version) {
+      const prefix = "flakflak:draft:" + siteId + ":";
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(prefix)) localStorage.removeItem(key);
+      }
+      await draftFileWrite;
+      await clearDraftFiles(prefix);
+      pending.forEach((item) => URL.revokeObjectURL(item.url));
+      pending = [];
+      threadUploads.clear();
+      clearMedia();
+      thread = null;
+      activeAnchor = null;
+      panel.classList.add("hide");
+      showError(
+        Error(
+          "Feedback was reset by the site owner. Previous drafts were cleared.",
+        ),
+      );
+    }
+    store(versionKey, next.feedback_version || 1);
+    site = next;
+    if (guest) {
+      guest.id = next.participant_id || guest.id;
+      guest.role = next.role;
+      store(identityKey, guest);
+    }
   }
   async function load() {
+    if (!guest) return;
+    await syncSite();
     const token = ++revision;
     let all: Comment[] = [],
       before: number | null = null;
@@ -534,8 +677,9 @@ function start(siteId: string, base: string) {
       schedule();
   });
   changes.observe(document.body, { childList: true, subtree: true });
-  function closePanel() {
+  async function closePanel() {
     if (busy) return;
+    if (!thread && activeAnchor) await draftFileWrite;
     threadRevision++;
     panel.classList.add("hide");
     activeAnchor = null;
@@ -556,16 +700,34 @@ function start(siteId: string, base: string) {
     type +
     ":" +
     id;
+  let draftFilesSaving = 0,
+    draftFilesError = false;
   let draftFileWrite: Promise<void> = Promise.resolve();
   function persistDraftFiles() {
     const key = draftKey("comment"),
       files = pending.map(({ file, id }) => ({ file, id }));
+    draftFilesSaving++;
+    draftFilesError = false;
     const write = draftFileWrite.then(() => writeDraftFiles(key, files));
-    draftFileWrite = write.catch(() => {
-      showError(
-        "Draft attachments could not be saved in this browser. Keep this page open and save your comment before leaving.",
-      );
-    });
+    draftFileWrite = write
+      .catch(() => {
+        draftFilesError = true;
+        showError(
+          "Draft attachments could not be saved in this browser. Keep this page open and save your comment before leaving.",
+        );
+      })
+      .finally(() => {
+        draftFilesSaving--;
+        if (panel.classList.contains("composer") && !savedId) {
+          const notice = panel.querySelector(".draft-tools > span");
+          if (notice)
+            notice.textContent = draftFilesError
+              ? "Attachments are not saved in this browser"
+              : draftFilesSaving
+                ? "Saving draft attachments…"
+                : "Draft saved in this browser";
+        }
+      });
     return write;
   }
   function saveNewDraft() {
@@ -579,7 +741,7 @@ function start(siteId: string, base: string) {
   }
   async function begin(anchor: Anchor, resume = false) {
     if (busy) return;
-    await ensureGuest();
+    await ensureMember();
     previousFocus = shadow.activeElement as HTMLElement | null;
     thread = null;
     activeAnchor = anchor;
@@ -799,7 +961,9 @@ function start(siteId: string, base: string) {
         "span",
         savedId
           ? "Comment saved. Retry any remaining attachments."
-          : "Draft saved in this browser",
+          : draftFilesSaving
+            ? "Saving draft attachments…"
+            : "Draft saved in this browser",
       ),
     );
     if (!savedId)
@@ -971,7 +1135,7 @@ function start(siteId: string, base: string) {
     header.insertBefore(toggleDetails, header.lastElementChild);
     const controls = el("div", "", "toolbar");
     controls.append(button("Reposition Dot", () => startReattach(t)));
-    if (guest?.id === c.participant_id) {
+    if (guest?.role === "owner" || guest?.id === c.participant_id) {
       controls.append(
         button("Edit comment", () => {
           body.querySelector(".comment-editor")?.remove();
@@ -1105,7 +1269,10 @@ function start(siteId: string, base: string) {
           replyHeader,
           historyText(reply.body, reply.kind === "status"),
         );
-        if (guest?.id === reply.participant_id && reply.kind === "reply")
+        if (
+          (guest?.role === "owner" || guest?.id === reply.participant_id) &&
+          reply.kind === "reply"
+        )
           replyMeta.append(
             button(
               "×",
@@ -1141,7 +1308,7 @@ function start(siteId: string, base: string) {
       () =>
         perform(async () => {
           if (!input.value.trim()) throw new Error("Enter a reply first.");
-          await ensureGuest();
+          await ensureMember();
           thread = await request<Thread>("/comments/" + c.id + "/replies", {
             method: "POST",
             body: json({ body: input.value.trim(), client_id: replyId }),
@@ -1184,12 +1351,12 @@ function start(siteId: string, base: string) {
       const b = button(a.name, () => gallery(t.attachments, i));
       if (a.mime.startsWith("image/")) {
         const img = el("img");
-        img.src = a.url;
+        setMediaSource(img, a);
         img.alt = a.name;
         b.replaceChildren(img);
       }
       file.append(b);
-      if (guest?.id === a.participant_id)
+      if (guest?.role === "owner" || guest?.id === a.participant_id)
         file.append(
           button("Remove file", () =>
             perform(async () => {
@@ -1219,7 +1386,7 @@ function start(siteId: string, base: string) {
     upload.setAttribute("aria-label", "Add attachments");
     async function flushUploads() {
       await perform(async () => {
-        await ensureGuest();
+        await ensureMember();
         const queue = threadUploads.get(c.id) || [];
         try {
           while (queue.length) {
@@ -1337,7 +1504,7 @@ function start(siteId: string, base: string) {
     for (const s of statuses) {
       const b = button(s[0].toUpperCase() + s.slice(1), async () => {
         if (s === c.status) return;
-        await ensureGuest();
+        await ensureMember();
         if (s === "closed") {
           showResolution();
           return;
@@ -1409,6 +1576,7 @@ function start(siteId: string, base: string) {
   }
   function gallery(files: Attachment[], index: number) {
     if (!files.length) return;
+    closeAttachmentViewer?.();
     const g = el("section", "", "gallery");
     g.setAttribute("role", "dialog");
     g.setAttribute("aria-modal", "true");
@@ -1417,12 +1585,14 @@ function start(siteId: string, base: string) {
     const savedOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = "hidden";
     const close = () => {
+      closeAttachmentViewer = null;
       g.querySelectorAll("video").forEach((v) => v.pause());
       g.remove();
       window.removeEventListener("keydown", escapeGallery, true);
       document.documentElement.style.overflow = savedOverflow;
       focus?.focus();
     };
+    closeAttachmentViewer = close;
     function escapeGallery(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -1437,12 +1607,12 @@ function start(siteId: string, base: string) {
         file = files[index];
       if (file.mime.startsWith("image/")) {
         const img = el("img");
-        img.src = file.url;
+        setMediaSource(img, file);
         img.alt = file.name;
         media.append(img);
       } else {
         const v = el("video");
-        v.src = file.url;
+        setMediaSource(v, file);
         v.controls = true;
         media.append(v);
       }
@@ -1505,7 +1675,7 @@ function start(siteId: string, base: string) {
         : "›";
     schedule();
     launch.setAttribute("aria-expanded", String(sidebarOpen));
-    if (!sidebarOpen) return;
+    if (!sidebarOpen || !guest) return;
     const header = titlebar("FlakFlak", () => {
       setSidebarOpen(false);
     });
@@ -1557,6 +1727,24 @@ function start(siteId: string, base: string) {
     );
     if (view === "settings") {
       body.id = "ff-settings";
+      body.append(
+        button("Sign out of this site", () =>
+          perform(async () => {
+            await request("/auth/logout", { method: "POST" });
+            guest = null;
+            store(identityKey, null);
+            comments = [];
+            pages = [];
+            events = [];
+            thread = null;
+            activeAnchor = null;
+            clearMedia();
+            dots.replaceChildren();
+            panel.classList.add("hide");
+            setSidebarOpen(false);
+          }),
+        ),
+      );
       body.append(
         el(
           "p",
@@ -2278,7 +2466,7 @@ function start(siteId: string, base: string) {
   }
   async function startReattach(original: Thread) {
     if (busy || reattaching) return;
-    await ensureGuest();
+    await ensureMember();
     const banner = el("div", "", "float-note");
     const sidebarWasOpen = sidebarOpen;
     reattaching = { original, anchor: null, sidebarWasOpen, banner };
@@ -2570,7 +2758,9 @@ function start(siteId: string, base: string) {
     host.dataset.altHeld = String(e.altKey);
     if (e.key === "Control") {
       if (controlOnly) {
-        setSidebarOpen(!sidebarOpen);
+        void ensureMember()
+          .then(() => setSidebarOpen(!sidebarOpen))
+          .catch(showError);
       }
       controlOnly = false;
     }
@@ -2642,16 +2832,11 @@ function start(siteId: string, base: string) {
         })
         .catch(showError);
   }
-  request<Site>("/config")
-    .then(async (s) => {
-      site = s;
-      launch.title = s.name;
-      await load();
-      openHash();
-    })
-    .catch((e) => {
-      launch.textContent = "FlakFlak · Setup needed";
-      launch.onclick = () => showError(e);
-      showError(e);
-    });
+  if (guest)
+    void load()
+      .then(() => {
+        launch.title = site?.name || "FlakFlak";
+        openHash();
+      })
+      .catch(showError);
 }

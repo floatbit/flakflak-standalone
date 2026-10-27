@@ -14,7 +14,7 @@ class SiteOrigin
         $site = DB::table('sites')->where('id', $request->route('site'))->first();
         abort_unless($site, 404);
         $origin = $request->header('Origin');
-        abort_unless(is_string($origin) && in_array(PageUrl::origin($origin), json_decode($site->origins, true), true), 403, 'This origin is not enabled for the site.');
+        abort_unless(is_string($origin) && (in_array(PageUrl::origin($origin), json_decode($site->origins, true), true) || $origin === config('flakflak.dashboard_origin')), 403, 'This origin is not enabled for the site.');
         $request->attributes->set('site', $site);
 
         return $next($request);

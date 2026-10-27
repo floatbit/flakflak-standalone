@@ -11,7 +11,8 @@ PHP_BIN="${PHP_BIN:-php}"; COMPOSER_BIN="${COMPOSER_BIN:-$(command -v composer)}
 for tool in git npm rsync tar curl; do command -v "$tool" >/dev/null || { echo "Missing command: $tool" >&2; exit 1; }; done
 "$PHP_BIN" -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || { echo 'PHP 8.2 or newer is required.' >&2; exit 1; }
 [[ -f "$COMPOSER_BIN" ]] || { echo "Composer executable not found: $COMPOSER_BIN" >&2; exit 1; }
-"$PHP_BIN" "$COMPOSER_BIN" --version >/dev/null
+COMPOSER_VERSION="$("$PHP_BIN" "$COMPOSER_BIN" --no-ansi --version)"
+[[ "$COMPOSER_VERSION" == Composer* ]] || { echo 'COMPOSER_BIN must point to the Composer PHP executable/PHAR, not a shell wrapper.' >&2; exit 1; }
 for public_path in "$API_PUBLIC" "$APP_PUBLIC" "$EMBED_PUBLIC"; do
  [[ "$public_path" = /*/public ]] || { echo 'Public targets must be absolute ServerPilot public paths.' >&2; exit 1; }
  [[ ! -e "$public_path" || -L "$public_path" ]] || { echo "Move the initial placeholder directory aside before setup: $public_path" >&2; exit 1; }
@@ -51,8 +52,10 @@ rm -r "$RELEASE/api/storage"
 ln -s "$DEPLOY_ROOT/shared/storage" "$RELEASE/api/storage"
 cd "$RELEASE"
 "$PHP_BIN" "$COMPOSER_BIN" install --working-dir=api --no-dev --no-interaction --prefer-dist --optimize-autoloader
+[[ -f "$RELEASE/api/vendor/autoload.php" ]] || { echo 'Composer did not create api/vendor/autoload.php; release not deployed.' >&2; exit 1; }
 npm ci --no-audit --no-fund
 export VITE_API_URL VITE_EMBED_URL
+export VITE_DASHBOARD_URL="${VITE_DASHBOARD_URL:-${APP_HEALTH_URL:-https://app.flakflak.com/}}"
 npm run build
 # Back up before running additive migrations; do not automatically run migration rollbacks.
 bash -c "$BACKUP_COMMAND"

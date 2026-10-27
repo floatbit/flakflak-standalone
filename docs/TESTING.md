@@ -1,9 +1,7 @@
 # Testing
 
 API feature tests run with PHP 8.2 and an in-memory SQLite database. They cover
-site boundaries, name collisions, guest credentials, duplicate saves/replies,
-URL normalization, status conflicts, resolution notes, MIME validation, signed
-attachment access, and site-wide data boundaries. Never run migrate:fresh on
+verified accounts, invitation acceptance and removal, scoped handoffs, site membership, duplicate saves/replies, URL normalization, status conflicts, resolution notes, MIME validation, authenticated attachment access, feedback reset, and read tracking. Never run migrate:fresh on
 your development or production database.
 
 Browser tests use installed Chrome (override CHROME_BIN if needed), optional Playwright Firefox/WebKit, compiled
@@ -20,7 +18,8 @@ settings, TLS, reverse proxies, other browsers, or a real ServerPilot deployment
 touch /private/tmp/flakflak-browser.sqlite
 DB_CONNECTION=sqlite DB_DATABASE=/private/tmp/flakflak-browser.sqlite DB_SOCKET= \
  /Applications/MAMP/bin/php/php8.2.0/bin/php artisan migrate
-DB_CONNECTION=sqlite DB_DATABASE=/private/tmp/flakflak-browser.sqlite DB_SOCKET= \
+APP_ENV=testing APP_URL=http://127.0.0.1:8081 MAIL_MAILER=log LOG_LEVEL=debug \
+ DB_CONNECTION=sqlite DB_DATABASE=/private/tmp/flakflak-browser.sqlite DB_SOCKET= \
  /Applications/MAMP/bin/php/php8.2.0/bin/php -S 127.0.0.1:8081 -t public
 # Terminal 2, from the repository root:
 npm run build
@@ -57,4 +56,8 @@ comments, replies, uploads, statuses and dot positioning through normal MAMP hos
 Real ServerPilot deployment, physical devices, actual Safari and CMS integration
 verification are still separate checklist items.
 
-Latest verification (standalone 0.2.0): PHP 8.2 suite passes 18 tests / 183 assertions; Node regression suite passes 7 tests; Chromium, Firefox and WebKit pass all 18 browser workflows including WordPress visual references. Frontend type checks and production builds pass. Original WordPress plugin working tree remains clean.
+Latest verification (email-account implementation): PHP 8.2 passes 28 tests / 239 assertions; Node passes 8 regression tests; Chromium, Firefox and WebKit pass all 36 browser workflows, including registration, invitation acceptance, widget sign-in, membership removal, reset invalidation, and draft attachment recovery. Frontend type checks and production builds pass. The interactive nuke command is tested against isolated SQLite and fake files only. Original WordPress plugin working tree remains clean.
+
+## Account test fixtures
+
+The CLI-only `tests/browser/seed-account.php` fixture refuses non-testing/non-disposable databases. It creates test members/session tokens for regression setup and is never exposed as an HTTP route. Email-registration browser tests separately exercise actual logged emails, magic verification, profile creation, copied invitations, explicit acceptance, and member removal. They also test the popup handoff and reset invalidation. Do not run the fixture against development MySQL or production.

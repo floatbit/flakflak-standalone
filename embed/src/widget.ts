@@ -217,7 +217,7 @@ function start(siteId: string, base: string) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", "Comment");
   const launch = button(
-    "FlakFlak · Feedback",
+    prefs.side === "right" ? "‹" : "›",
     async () => {
       await ensureMember();
       setSidebarOpen(!sidebarOpen);
@@ -225,6 +225,8 @@ function start(siteId: string, base: string) {
     "launcher",
   );
   launch.setAttribute("aria-label", "FlakFlak · Feedback");
+  launch.setAttribute("aria-expanded", "false");
+  launch.title = "FlakFlak";
   shadow.append(dots, sidebar, panel, launch);
   function request<T>(path: string, options: RequestInit = {}) {
     if (options.method && options.method !== "GET" && site?.feedback_version) {

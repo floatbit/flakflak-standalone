@@ -1224,7 +1224,7 @@ test("email registration, copied invitation, acceptance and member removal work 
   await page.goto(appOrigin);
   await page.locator('.site-row[data-site-id="' + siteId + '"]').click();
   const invited = "member-" + crypto.randomUUID() + "@example.test";
-  await page.getByLabel("Invite by email").fill(invited);
+  await page.getByLabel("Invite someone to this site by email").fill(invited);
   await page
     .getByRole("button", { name: "Send invitation", exact: true })
     .click();
@@ -1261,6 +1261,11 @@ test("email registration, copied invitation, acceptance and member removal work 
     }),
   ).toBeVisible();
   await expect(member.getByLabel("Email address")).toHaveValue(invited);
+  const invitationBounds = await member.locator(".invitation").boundingBox();
+  const signInBounds = await member.locator(".access").boundingBox();
+  expect(
+    signInBounds!.y - invitationBounds!.y - invitationBounds!.height,
+  ).toBeGreaterThanOrEqual(24);
   const before = (await localMagicLinks()).length;
   await member
     .getByRole("button", { name: "Email me a sign-in link", exact: true })
@@ -1272,9 +1277,13 @@ test("email registration, copied invitation, acceptance and member removal work 
   const magic = (await localMagicLinks()).at(-1)!;
   const emailTab = await memberContext.newPage();
   await emailTab.goto(magic);
+  await expect(emailTab.locator(".invitation")).toHaveCount(0);
   await emailTab
     .getByRole("button", { name: "Confirm sign-in", exact: true })
     .click();
+  await expect(emailTab.getByLabel("Display name")).toBeVisible();
+  await expect(emailTab.locator(".invitation")).toHaveCount(0);
+  await expect(emailTab.getByRole("status")).toHaveCount(0);
   await emailTab.getByLabel("Display name").fill("Invited member");
   await emailTab
     .getByRole("button", { name: "Save profile", exact: true })
@@ -1330,6 +1339,17 @@ test("widget connects through an authenticated popup and reset clears recovered 
   await expect(
     page.getByRole("button", { name: "FlakFlak · Feedback" }),
   ).toHaveAttribute("aria-expanded", "false");
+  // Keep the regression fixture from reseeding a session after explicit sign-out.
+  await page.evaluate(
+    (site) => localStorage.setItem("flakflak:member:" + site, "null"),
+    siteId,
+  );
+  await page.reload();
+  const signedOutLauncher = page.getByRole("button", {
+    name: "FlakFlak · Feedback",
+  });
+  await expect(signedOutLauncher).toHaveText("›");
+  await expect(signedOutLauncher).toHaveAttribute("aria-expanded", "false");
   await page
     .locator("#intro p")
     .click({ modifiers: ["Shift"], position: { x: 80, y: 10 } });
@@ -1392,7 +1412,7 @@ test("owner can delete a pending invitation and its copied link stops working", 
   await page.goto(appOrigin);
   await page.locator('.site-row[data-site-id="' + siteId + '"]').click();
   const email = "delete-" + crypto.randomUUID() + "@example.test";
-  await page.getByLabel("Invite by email").fill(email);
+  await page.getByLabel("Invite someone to this site by email").fill(email);
   await page
     .getByRole("button", { name: "Send invitation", exact: true })
     .click();

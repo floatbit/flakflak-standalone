@@ -124,13 +124,17 @@ p {
 .columns {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
-  gap: 24px;
+  gap: 32px;
 }
 .card {
   background: #191f29;
   border: 1px solid #303a49;
   border-radius: 14px;
   padding: 28px;
+}
+main > .card + .card,
+main > .card + .columns {
+  margin-top: 32px;
 }
 .section-heading {
   display: flex;
@@ -234,15 +238,16 @@ pre {
 .installation p {
   color: #a6b2c6;
 }
-.demo-links {
+.website-links {
+  margin-top: 24px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
 }
-.demo-links span {
-  font-size: 12px;
-  color: #93a2ba;
+.website-links a {
+  overflow-wrap: anywhere;
+  max-width: 100%;
 }
 .access {
   max-width: 650px;
@@ -318,9 +323,17 @@ footer {
   border: 1px solid #945262;
   border-radius: 8px;
   padding: 20px;
-  margin-top: 32px;
+  margin-top: 48px;
 }
 .danger-zone button {
   background: #e4a5af;
   border-color: #e4a5af;
+}
+
+.members-heading {
+  margin-top: 48px;
+}
+
+.invite-section {
+  margin-top: 40px;
 }

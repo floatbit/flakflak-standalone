@@ -139,8 +139,9 @@ async function confirmLogin() {
     store(sessionKey, { token: result.token, expires_at: result.expires_at });
     magic.value = "";
     await refreshSites();
-    notice.value =
-      "Signed in. If you started from a website, return to its FlakFlak sign-in window to connect.";
+    notice.value = invitation.value
+      ? ""
+      : "Signed in. If you started from a website, return to its FlakFlak sign-in window to connect.";
   });
 }
 async function saveProfile() {
@@ -389,10 +390,18 @@ window.addEventListener("storage", (event) => {
       </p>
       <p v-if="error" role="alert" class="error">{{ error }}</p>
       <p v-if="notice" role="status" class="notice">{{ notice }}</p>
-      <section v-if="invitationInfo" class="card">
+      <section
+        v-if="
+          invitationInfo && !magic && (!user || (user.name && !editingProfile))
+        "
+        class="card invitation"
+      >
         <h2>Invitation to {{ invitationInfo.site_name }}</h2>
         <p>Invited email: {{ invitationInfo.email }}</p>
-        <p>Sign in with this email, then accept to gain site access.</p>
+        <p v-if="!user">
+          Sign in with this email, then accept to gain site access.
+        </p>
+        <p v-else>Accept this invitation to access the site’s feedback.</p>
         <button v-if="user && user.name" @click="accept" :disabled="busy">
           Accept invitation
         </button>
@@ -538,29 +547,18 @@ window.addEventListener("storage", (event) => {
               <p>Add this script before your website’s closing body tag.</p>
               <pre tabindex="0">{{ snippet }}</pre>
             </template>
-            <div class="demo-links">
+            <nav class="website-links" aria-label="Allowed websites">
               <a
-                :href="'/demo.html?site=' + selected.id"
+                v-for="origin in selected.origins"
+                :key="origin"
+                :href="origin"
                 target="_blank"
-                rel="noopener"
-                >Open demo ↗</a
-              ><span
-                >The dashboard’s origin must be allowed to connect the
-                demo.</span
+                rel="noopener noreferrer"
+                >{{ origin }} ↗</a
               >
-            </div>
+            </nav>
             <template v-if="isOwner"
-              ><h2>Members</h2>
-              <p>Invitations grant access to this site only.</p>
-              <form @submit.prevent="invite(inviteEmail)">
-                <label for="invite-email">Invite by email</label
-                ><input
-                  id="invite-email"
-                  v-model="inviteEmail"
-                  type="email"
-                  required
-                /><button :disabled="busy">Send invitation</button>
-              </form>
+              ><h2 class="members-heading">Members</h2>
               <div
                 v-for="person in members"
                 :key="person.id"
@@ -620,6 +618,20 @@ window.addEventListener("storage", (event) => {
                   aria-label="Invitation link"
                   @focus="($event.target as HTMLInputElement).select()"
                 />
+              </div>
+              <div class="invite-section">
+                <form
+                  class="invitation-form"
+                  @submit.prevent="invite(inviteEmail)"
+                >
+                  <label for="invite-email">Invite someone to this site by email</label
+                  ><input
+                    id="invite-email"
+                    v-model="inviteEmail"
+                    type="email"
+                    required
+                  /><button :disabled="busy">Send invitation</button>
+                </form>
               </div>
               <section class="danger-zone">
                 <h2>Reset feedback</h2>

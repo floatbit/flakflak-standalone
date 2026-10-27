@@ -1,5 +1,17 @@
 # Changelog
 
+## Invitation and sign-in polish
+
+Commit message: Polish invitation screens and site member navigation
+
+- Initialize signed-out widget togglers with the compact directional icon instead of overflowing brand text.
+- Increase spacing between dashboard cards, website links, member management, invitations, and reset controls.
+- Add breathing room above Members and move the invitation form below the member and pending-invitation lists.
+- Replace the selected site’s demo link with links to each allowed website address.
+- Separate invitation and sign-in cards with 32px spacing.
+- Hide the invitation card during email confirmation and profile setup, then restore explicit acceptance after the display name is saved.
+- Remove the unrelated website-connection notice from invitation sign-in.
+
 ## Private email accounts and invitations
 
 Commit message: Add invitation-only email accounts and standalone reset tools

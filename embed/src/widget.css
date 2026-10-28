@@ -2367,3 +2367,64 @@ progress::-moz-progress-bar {
 :host([data-dragging="true"]) .dot {
   cursor: grabbing;
 }
+
+/* Floating feedback entry point, independent of retro button treatments. */
+:host([data-theme]) .launcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  top: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left: 16px;
+  right: auto;
+  transform: none;
+  width: auto;
+  height: 48px;
+  min-width: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--ff-border) !important;
+  border-radius: 24px !important;
+  background: var(--ff-header) !important;
+  color: var(--ff-text) !important;
+  box-shadow: 0 4px 16px #0003 !important;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: none;
+}
+:host([data-theme][data-side="right"]) .launcher {
+  left: auto;
+  right: 16px;
+}
+:host([data-theme]) .launcher.hide {
+  display: none;
+}
+:host([data-theme]) .launcher:hover {
+  border-color: var(--ff-accent) !important;
+}
+.launcher-icon,
+.launcher-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+.launcher-unread {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--ff-header);
+  border-radius: 50%;
+  background: #3988ff;
+}
+@media (max-width: 767px) {
+  :host([data-theme]) .launcher {
+    width: 48px;
+    padding: 0;
+  }
+  .launcher-label {
+    display: none;
+  }
+}

@@ -217,7 +217,7 @@ function start(siteId: string, base: string) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", "Comment");
   const launch = button(
-    prefs.side === "right" ? "‹" : "›",
+    "",
     async () => {
       await ensureMember();
       setSidebarOpen(!sidebarOpen);
@@ -226,7 +226,17 @@ function start(siteId: string, base: string) {
   );
   launch.setAttribute("aria-label", "FlakFlak · Feedback");
   launch.setAttribute("aria-expanded", "false");
-  launch.title = "FlakFlak";
+  launch.title = "Open feedback";
+  const launchIcon = el("span", "", "launcher-icon");
+  launchIcon.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3Z"/><path d="M7 8h9M7 12h6"/></svg>';
+  const launchUnread = el("span", "", "launcher-unread hide");
+  launchUnread.setAttribute("aria-hidden", "true");
+  launch.append(
+    launchIcon,
+    el("span", "Feedback", "launcher-label"),
+    launchUnread,
+  );
   shadow.append(dots, sidebar, panel, launch);
   function request<T>(path: string, options: RequestInit = {}) {
     if (options.method && options.method !== "GET" && site?.feedback_version) {
@@ -1668,13 +1678,8 @@ function start(siteId: string, base: string) {
   function renderSidebar() {
     sidebar.classList.toggle("hide", !sidebarOpen);
     host.dataset.sidebarOpen = String(sidebarOpen);
-    launch.textContent = sidebarOpen
-      ? prefs.side === "right"
-        ? "›"
-        : "‹"
-      : prefs.side === "right"
-        ? "‹"
-        : "›";
+    launch.classList.toggle("hide", sidebarOpen);
+    launchUnread.classList.toggle("hide", !comments.some(isUnread));
     schedule();
     launch.setAttribute("aria-expanded", String(sidebarOpen));
     if (!sidebarOpen || !guest) return;

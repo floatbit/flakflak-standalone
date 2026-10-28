@@ -3,7 +3,10 @@ import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import fs from "node:fs/promises";
 import path from "node:path";
 async function openSidebar(page: Page) {
-  const launcher = page.getByRole("button", { name: "FlakFlak · Feedback" });
+  const launcher = page.getByRole("button", {
+    name: "FlakFlak · Feedback",
+    includeHidden: true,
+  });
   await expect(launcher).toHaveAttribute("aria-expanded", /true|false/);
   if ((await launcher.getAttribute("aria-expanded")) !== "true")
     await launcher.click();
@@ -140,7 +143,10 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   ).toBeVisible();
   await page.goto(appOrigin + "/demo.html?site=" + siteId);
   await expect(
-    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+    page.getByRole("button", {
+      name: "FlakFlak · Feedback",
+      includeHidden: true,
+    }),
   ).toBeVisible();
   await page
     .locator("#intro p")
@@ -362,7 +368,10 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   );
   await other.goto(embedOrigin + "/demo.html?site=" + siteId);
   await expect(
-    other.getByRole("button", { name: "FlakFlak · Feedback" }),
+    other.getByRole("button", {
+      name: "FlakFlak · Feedback",
+      includeHidden: true,
+    }),
   ).toBeVisible();
   await openSidebar(other);
   await expect(other.getByText("1 active")).toHaveCount(0);
@@ -412,7 +421,10 @@ test("settings persist, stay isolated from the host page, and fit review navigat
   const originalFont = await page
     .locator("#intro p")
     .evaluate((node) => getComputedStyle(node).fontFamily);
-  const launcher = page.getByRole("button", { name: "FlakFlak · Feedback" });
+  const launcher = page.getByRole("button", {
+    name: "FlakFlak · Feedback",
+    includeHidden: true,
+  });
   await launcher.click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
@@ -517,7 +529,10 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   const url = appOrigin + "/demo.html?site=" + siteId;
   await page.goto(url);
   await expect(
-    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+    page.getByRole("button", {
+      name: "FlakFlak · Feedback",
+      includeHidden: true,
+    }),
   ).toBeVisible();
   await page
     .locator("#intro p")
@@ -868,7 +883,10 @@ test("new-dot dragging and keyboard movement preserve page-specific recoverable 
   const url = appOrigin + "/demo.html?site=" + siteId;
   await page.goto(url);
   await expect(
-    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+    page.getByRole("button", {
+      name: "FlakFlak · Feedback",
+      includeHidden: true,
+    }),
   ).toBeVisible();
   await page
     .locator("#intro p")
@@ -1084,7 +1102,10 @@ test("sidebar open and closed state survives reload and navigation", async ({
 }) => {
   const url = appOrigin + "/demo.html?site=" + siteId;
   await page.goto(url);
-  const launcher = page.getByRole("button", { name: "FlakFlak · Feedback" });
+  const launcher = page.getByRole("button", {
+    name: "FlakFlak · Feedback",
+    includeHidden: true,
+  });
   await expect(launcher).toHaveAttribute("aria-expanded", "false");
   await launcher.click();
   await expect(launcher).toHaveAttribute("aria-expanded", "true");
@@ -1092,9 +1113,52 @@ test("sidebar open and closed state survives reload and navigation", async ({
   await expect(launcher).toHaveAttribute("aria-expanded", "true");
   await page.goto(url + "&variant=another");
   await expect(launcher).toHaveAttribute("aria-expanded", "true");
-  await launcher.click();
+  await expect(launcher).toBeHidden();
+  await page
+    .locator(".sidebar")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await expect(launcher).toBeVisible();
   await page.reload();
   await expect(launcher).toHaveAttribute("aria-expanded", "false");
+});
+
+test("floating feedback button follows sidebar side and becomes icon-only on mobile", async ({
+  page,
+}) => {
+  await page.goto(appOrigin + "/demo.html?site=" + siteId);
+  const launcher = page.getByRole("button", {
+    name: "FlakFlak · Feedback",
+    includeHidden: true,
+  });
+  await expect(launcher).toBeVisible();
+  await expect(launcher).toHaveText("Feedback");
+  let bounds = await launcher.boundingBox();
+  expect(bounds!.x).toBe(16);
+  expect(bounds!.height).toBe(48);
+  expect(900 - bounds!.y - bounds!.height).toBe(16);
+  await launcher.click();
+  await expect(launcher).toBeHidden();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Right", exact: true }).click();
+  await page
+    .locator(".sidebar")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  bounds = await launcher.boundingBox();
+  expect(1280 - bounds!.x - bounds!.width).toBe(16);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(launcher.locator(".launcher-label")).toBeHidden();
+  bounds = await launcher.boundingBox();
+  expect(bounds!.width).toBe(48);
+  expect(390 - bounds!.x - bounds!.width).toBe(16);
+  await launcher.click();
+  await expect(launcher).toBeHidden();
+  await page
+    .locator(".sidebar")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await expect(launcher).toBeVisible();
 });
 
 test("new themes apply and retain readable settings", async ({ page }) => {
@@ -1146,7 +1210,10 @@ test("new themes apply and retain readable settings", async ({ page }) => {
 test("Shift placement cursor resets when released", async ({ page }) => {
   await page.goto(appOrigin + "/demo.html?site=" + siteId);
   await expect(
-    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+    page.getByRole("button", {
+      name: "FlakFlak · Feedback",
+      includeHidden: true,
+    }),
   ).toBeVisible();
   await page.keyboard.down("Shift");
   await expect(page.locator("#intro p")).toHaveCSS("cursor", "crosshair");
@@ -1337,7 +1404,10 @@ test("widget connects through an authenticated popup and reset clears recovered 
     .getByRole("button", { name: "Sign out of this site", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+    page.getByRole("button", {
+      name: "FlakFlak · Feedback",
+      includeHidden: true,
+    }),
   ).toHaveAttribute("aria-expanded", "false");
   // Keep the regression fixture from reseeding a session after explicit sign-out.
   await page.evaluate(
@@ -1347,8 +1417,9 @@ test("widget connects through an authenticated popup and reset clears recovered 
   await page.reload();
   const signedOutLauncher = page.getByRole("button", {
     name: "FlakFlak · Feedback",
+    includeHidden: true,
   });
-  await expect(signedOutLauncher).toHaveText("›");
+  await expect(signedOutLauncher).toHaveText("Feedback");
   await expect(signedOutLauncher).toHaveAttribute("aria-expanded", "false");
   await page
     .locator("#intro p")

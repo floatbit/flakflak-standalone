@@ -1,5 +1,12 @@
 # Changelog
 
+## Floating feedback button
+
+Commit message: Add floating feedback launcher with responsive layout
+
+- Replace the edge arrow with a themed floating speech-bubble and Feedback button, 16px from the bottom on the chosen sidebar side.
+- Hide the launcher while the sidebar is open, use an icon-only mobile button, and show a blue unread indicator.
+
 ## Invitation and sign-in polish
 
 Commit message: Polish invitation screens and site member navigation

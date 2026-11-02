@@ -1,5 +1,12 @@
 # Changelog
 
+## Settings account placement
+
+Commit message: Move Settings account controls to the bottom and tighten spacing
+
+- Move the greeting and Sign out row below the keyboard shortcuts at the bottom of Settings.
+- Remove the extra top margin above Sidebar position.
+
 ## Settings greeting
 
 Commit message: Add a greeting to the Settings account row

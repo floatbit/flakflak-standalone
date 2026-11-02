@@ -736,6 +736,9 @@ button[aria-label="Close"]:hover {
 .sidebar-scroll#ff-settings {
   padding: 14px 18px 18px;
 }
+.sidebar-scroll#ff-settings > .setting-block:first-child {
+  margin-top: 0;
+}
 .group-toggle {
   display: block;
   width: fit-content;
@@ -2549,11 +2552,13 @@ progress::-moz-progress-bar {
 }
 
 .settings-account {
+  padding-top: 20px;
+  border-top: 1px solid var(--ff-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin: 20px 0 0;
 }
 .settings-account-name {
   min-width: 0;

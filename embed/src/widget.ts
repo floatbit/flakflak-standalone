@@ -1910,7 +1910,6 @@ function start(siteId: string, base: string) {
         el("strong", guest ? "Hi, " + guest.name : "No name entered yet.", "settings-account-name"),
         signOut,
       );
-      body.append(accountRow);
       const choices = <K extends keyof Preferences>(
         legend: string,
         key: K,
@@ -2018,7 +2017,7 @@ function start(siteId: string, base: string) {
           "hint",
         ),
       );
-      body.append(shortcuts);
+      body.append(shortcuts, accountRow);
       sidebar.append(body);
       return;
     }

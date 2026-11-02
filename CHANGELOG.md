@@ -1,5 +1,20 @@
 # Changelog
 
+## Compact sidebar overview
+
+Commit message: Simplify sidebar overview and remember All pages expansion
+
+- Rename the Activity view heading to Recent Activity and remove its redundant supporting description.
+
+- Combine the display name and Sign out action into one Settings row, retaining a site-specific tooltip and accessible label.
+
+- Make All pages collapsible with its heading and total always visible; remember expansion across pages and reloads in this browser.
+
+- Place unread and category filters on one row while preserving accessible category labels.
+- Combine completion percentage and remaining count above the progress bar.
+- Remove the repeated all-pages search heading and label the current page row “This page”.
+- Keep General badges and collapse/expand-all controls visible.
+
 ## Public and private project modes
 
 Commit message: Add immutable public and private project modes

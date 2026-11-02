@@ -1883,12 +1883,12 @@ function start(siteId: string, base: string) {
     }
     header.insertBefore(tabs, gear);
     sidebar.append(
-      el("h2", view[0].toUpperCase() + view.slice(1), "sidebar-view-title"),
+      el("h2", view === "activity" ? "Recent Activity" : view[0].toUpperCase() + view.slice(1), "sidebar-view-title"),
     );
     if (view === "settings") {
       body.id = "ff-settings";
-      body.append(
-        button("Sign out of this site", () =>
+      const accountRow = el("div", "", "settings-account");
+      const signOut = button("Sign out", () =>
           perform(async () => {
             await request("/auth/logout", { method: "POST" });
             guest = null;
@@ -1903,15 +1903,14 @@ function start(siteId: string, base: string) {
             panel.classList.add("hide");
             setSidebarOpen(false);
           }),
-        ),
+        );
+      signOut.title = "Sign out of this site";
+      signOut.setAttribute("aria-label", "Sign out of this site");
+      accountRow.append(
+        el("strong", guest ? guest.name : "No name entered yet.", "settings-account-name"),
+        signOut,
       );
-      body.append(
-        el(
-          "p",
-          guest ? "Reviewing as " + guest.name : "No name entered yet.",
-          "meta",
-        ),
-      );
+      body.append(accountRow);
       const choices = <K extends keyof Preferences>(
         legend: string,
         key: K,
@@ -2038,10 +2037,7 @@ function start(siteId: string, base: string) {
           renderSidebar();
         }),
       );
-      body.append(
-        controls,
-        el("p", "Recent activity across this site.", "hint"),
-      );
+      body.append(controls);
       const visibleEvents = events.filter(
         (event) =>
           !activityUnreadOnly ||
@@ -2307,8 +2303,9 @@ function start(siteId: string, base: string) {
       categoryFilter = category.value as Category | "";
       renderSidebar();
     };
-    categoryControl.append(el("label", "Category"), category);
-    localHeader.append(categoryControl);
+    categoryControl.append(category);
+    unreadTools.classList.add("sidebar-filters");
+    unreadTools.insertBefore(categoryControl, filter.nextSibling);
     const resume = body.querySelector(".resume-draft");
     if (resume) localHeader.append(resume);
     sidebar.append(localHeader);
@@ -2383,10 +2380,26 @@ function start(siteId: string, base: string) {
       syncGroupToggle();
     }
     renderList();
-    body.append(
-      el("hr", "", "separator"),
-      el("h3", "All pages", "all-pages-title"),
-    );
+    body.append(el("hr", "", "separator"));
+    const overview = el("section", "", "all-pages-overview");
+    const overviewBody = el("div", "", "all-pages-content");
+    let overviewOpen = readStored<boolean>("flakflak:all-pages-open", true);
+    const overviewToggle = button("", () => {
+      overviewOpen = !overviewOpen;
+      store("flakflak:all-pages-open", overviewOpen);
+      syncOverview();
+    }, "all-pages-toggle");
+    function syncOverview() {
+      overviewToggle.setAttribute("aria-expanded", String(overviewOpen));
+      overviewBody.hidden = !overviewOpen;
+    }
+    overviewBody.id = "flakflak-all-pages-content";
+    overviewToggle.setAttribute("aria-controls", overviewBody.id);
+    const overviewHeading = el("h3", "", "all-pages-title");
+    overviewHeading.append(overviewToggle);
+    overview.append(overviewHeading, overviewBody);
+    body.append(overview);
+    syncOverview();
     const globalInput = el("input");
     globalInput.type = "search";
     globalInput.placeholder = "Search all pages...";
@@ -2476,7 +2489,7 @@ function start(siteId: string, base: string) {
       if (searchTimer) clearTimeout(searchTimer);
       searchTimer = setTimeout(() => runGlobal(true), 350);
     };
-    body.append(globalInput, globalResults);
+    overviewBody.append(globalInput, globalResults);
     renderGlobal();
     let total = 0,
       closed = 0;
@@ -2486,6 +2499,11 @@ function start(siteId: string, base: string) {
         if (status === "closed") closed += Number(count);
       }
     }
+    overviewToggle.append(
+      el("span", "", "all-pages-chevron"),
+      el("span", "All pages"),
+      el("span", total + (total === 1 ? " comment" : " comments"), "meta all-pages-count"),
+    );
     const totals = el("div", "", "site-totals");
     for (const status of ["open", "review"] as const) {
       const count = pages.reduce(
@@ -2508,14 +2526,14 @@ function start(siteId: string, base: string) {
       );
       totals.append(card);
     }
-    body.append(totals);
+    overviewBody.append(totals);
     const activePages = pages.filter((page) =>
       Object.entries(page.counts).some(
         ([status, count]) => status !== "closed" && Number(count) > 0,
       ),
     ).length;
     const percent = total ? Math.round((closed / total) * 100) : 0;
-    body.append(
+    overviewBody.append(
       el(
         "p",
         total -
@@ -2526,23 +2544,16 @@ function start(siteId: string, base: string) {
           (activePages === 1 ? "page" : "pages"),
         "meta site-caption",
       ),
-      el("strong", percent + "% finished"),
+      el("strong", percent + "% finished · " + (total - closed) + " remaining"),
     );
     const progress = el("progress");
     progress.max = 100;
     progress.value = percent;
     progress.setAttribute("aria-label", "Feedback finished");
-    body.append(
-      progress,
-      el(
-        "p",
-        closed + " closed · " + (total - closed) + " remaining",
-        "meta progress-caption",
-      ),
-    );
-    const siteSearch = el("label", "Search all pages", "site-search-label");
+    overviewBody.append(progress);
+    const siteSearch = el("div", "", "site-search-label");
     siteSearch.append(globalInput);
-    body.append(siteSearch, globalResults);
+    overviewBody.append(siteSearch, globalResults);
     for (const p of pages) {
       if (siteStatusFilter && !p.counts[siteStatusFilter]) continue;
       if (
@@ -2555,8 +2566,9 @@ function start(siteId: string, base: string) {
       const a = el("a", "", "row page-row");
       a.href = p.url;
       const heading = el("div", "", "page-row-heading");
-      heading.append(el("strong", p.title));
-      if (pageIdentity(p.url) === pageIdentity(location.href)) {
+      const isCurrentPage = pageIdentity(p.url) === pageIdentity(location.href);
+      heading.append(el("strong", isCurrentPage ? "This page" : p.title));
+      if (isCurrentPage) {
         a.setAttribute("aria-current", "page");
         heading.append(el("span", "Current", "current-badge"));
       }
@@ -2572,7 +2584,7 @@ function start(siteId: string, base: string) {
         counts.append(label);
       }
       a.append(heading, counts);
-      body.append(a);
+      overviewBody.append(a);
     }
     sidebar.append(body);
   }

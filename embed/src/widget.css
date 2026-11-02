@@ -946,7 +946,7 @@ progress::-moz-progress-bar {
   color: var(--ff-muted);
 }
 .site-search-label input {
-  margin: 7px 0 0;
+  margin: 0;
   padding: 10px;
   font-size: 13px;
   background: var(--ff-surface);
@@ -2500,4 +2500,65 @@ progress::-moz-progress-bar {
 }
 .public-name-form > button {
   justify-self: start;
+}
+
+.sidebar-filters .category-filter {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.sidebar-filters > button:first-child {
+  flex-shrink: 0;
+}
+.sidebar-filters > button:not(:first-child) {
+  flex-basis: 100%;
+}
+
+.all-pages-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  font: inherit;
+  color: var(--ff-text);
+}
+.all-pages-toggle .all-pages-count {
+  margin: 0 0 0 auto;
+  font-weight: 400;
+}
+.all-pages-chevron {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  margin: 0 3px;
+}
+.all-pages-toggle[aria-expanded="true"] .all-pages-chevron {
+  transform: rotate(45deg);
+}
+.all-pages-content[hidden] {
+  display: none;
+}
+
+.settings-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.settings-account-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.settings-account > button {
+  flex-shrink: 0;
 }

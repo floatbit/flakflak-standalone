@@ -56,7 +56,7 @@ comments, replies, uploads, statuses and dot positioning through normal MAMP hos
 Real ServerPilot deployment, physical devices, actual Safari and CMS integration
 verification are still separate checklist items.
 
-Latest verification (email-account implementation): PHP 8.2 passes 28 tests / 239 assertions; Node passes 8 regression tests; Chromium, Firefox and WebKit pass all 36 browser workflows, including registration, invitation acceptance, widget sign-in, membership removal, reset invalidation, and draft attachment recovery. Frontend type checks and production builds pass. The interactive nuke command is tested against isolated SQLite and fake files only. Original WordPress plugin working tree remains clean.
+Latest verification (categories and site numbering): PHP 8.2 passes 32 tests / 308 assertions; Node passes 8 regression tests; Chromium, Firefox and WebKit pass all 45 browser workflows. Coverage includes categories and responsive badge alignment, General defaults and draft recovery, site-wide permanent numbering, creation-order backfill, retry/deletion/reset sequence behavior, display-number search and activity, and unchanged ID-based shared links. Frontend type checks and production builds pass. Original WordPress plugin working tree remains clean.
 
 ## Account test fixtures
 

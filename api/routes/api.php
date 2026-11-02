@@ -45,6 +45,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/comments/{comment}/replies/{reply}', [I::class, 'deleteReply'])->whereNumber(['comment', 'reply']);
         Route::delete('/comments/{comment}/attachments/{attachment}', [I::class, 'deleteAttachment'])->whereNumber(['comment', 'attachment']);
         Route::post('/comments/{comment}/replies', [F::class, 'reply']);
+        Route::patch('/comments/{comment}/category', [F::class, 'category'])->whereNumber('comment');
         Route::patch('/comments/{comment}/status', [F::class, 'status']);
         Route::post('/comments/{comment}/attachments', [F::class, 'upload'])->middleware('throttle:attachment-uploads');
     });

@@ -12,6 +12,7 @@ import type {
   Page,
   Reply,
   Status,
+  Category,
   Thread,
   Activity,
   Site,
@@ -78,8 +79,32 @@ function start(siteId: string, base: string) {
     });
     return b;
   };
-  const statuses: Status[] = ["open", "review", "content", "closed"];
-  const colors: Record<Status, string> = {
+  const statuses: Status[] = ["open", "review", "closed"];
+  const categories: Category[] = [
+    "general",
+    "content",
+    "design",
+    "functionality",
+  ];
+  const categoryName = (value: Category) =>
+    value[0].toUpperCase() + value.slice(1);
+  function categorySelect(value: Category | "", label: string, all = false) {
+    const select = el("select");
+    select.setAttribute("aria-label", label);
+    if (all) {
+      const option = el("option", "All categories");
+      option.value = "";
+      select.append(option);
+    }
+    for (const category of categories) {
+      const option = el("option", categoryName(category));
+      option.value = category;
+      select.append(option);
+    }
+    select.value = value;
+    return select;
+  }
+  const colors: Record<Status | "content", string> = {
     open: "#ffaf99",
     review: "#83d4ff",
     content: "#ddbcff",
@@ -112,7 +137,7 @@ function start(siteId: string, base: string) {
       schedule();
     }
   });
-  const dotColors: Record<Status, string> = {
+  const dotColors: Record<Status | "content", string> = {
     open: "#FF5733",
     review: "#168BD2",
     content: "#9333EA",
@@ -137,6 +162,7 @@ function start(siteId: string, base: string) {
     guest = null;
   let activeAnchor: Anchor | null = null,
     sidebarOpen =
+      !!guest &&
       readStored<boolean>("flakflak:sidebar-open:" + siteId, false) === true,
     armed = false,
     busy = false,
@@ -144,7 +170,8 @@ function start(siteId: string, base: string) {
     newId: string = crypto.randomUUID(),
     savedId: number | null = null,
     newBody = "",
-    newStatus: "open" | "content" = "open",
+    newStatus: "open" = "open",
+    newCategory: Category = "general",
     replyId = crypto.randomUUID();
   let siteQuery = "",
     siteSearchPage = 1,
@@ -153,11 +180,13 @@ function start(siteId: string, base: string) {
     siteSearchRevision = 0;
   let siteResults: {
     id: number;
+    comment_number: number;
     body: string;
     name: string;
     title: string;
     url: string;
     status: Status;
+    category: Category;
   }[] = [];
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   type PendingUpload = { file: File; id: string; error?: string };
@@ -201,6 +230,7 @@ function start(siteId: string, base: string) {
     renderSidebar();
   }
   let pending: { file: File; id: string; url: string }[] = [];
+  let categoryFilter: Category | "" = "";
   let search = "",
     showClosed = readStored("flakflak:closed:" + siteId, false),
     view: "comments" | "activity" | "settings" = "comments";
@@ -572,7 +602,7 @@ function start(siteId: string, base: string) {
     for (const c of comments) {
       if (c.status === "closed" && !showClosed) continue;
       const b = button(
-        "#" + c.id,
+        "#" + c.comment_number,
         () => {
           if (performance.now() >= suppressDotClickUntil)
             return openThread(c.id);
@@ -586,7 +616,10 @@ function start(siteId: string, base: string) {
       b.dataset.commentId = String(c.id);
       b.style.setProperty("--status", colors[c.status]);
       b.style.setProperty("--dot-color", dotColors[c.status]);
-      b.setAttribute("aria-label", "Open comment #" + c.id + " · " + c.status);
+      b.setAttribute(
+        "aria-label",
+        "Open comment #" + c.comment_number + " · " + c.status,
+      );
       dots.append(b);
     }
     if (activeAnchor) {
@@ -747,6 +780,7 @@ function start(siteId: string, base: string) {
       body: newBody,
       anchor: activeAnchor,
       status: newStatus,
+      category: newCategory,
       client_id: newId,
       saved_id: savedId,
     });
@@ -761,12 +795,14 @@ function start(siteId: string, base: string) {
     newId = crypto.randomUUID();
     savedId = null;
     newStatus = "open";
+    newCategory = "general";
     pending.forEach((p) => URL.revokeObjectURL(p.url));
     pending = [];
     const draft = readStored<{
       body: string;
       anchor: Anchor;
       status: "open" | "content";
+      category?: Category;
       client_id: string;
       saved_id: number | null;
     } | null>(draftKey("comment"), null);
@@ -784,7 +820,13 @@ function start(siteId: string, base: string) {
       }
       newBody = draft.body;
       activeAnchor = draft.anchor;
-      newStatus = draft.status;
+      newStatus = "open";
+      newCategory =
+        draft.category && categories.includes(draft.category)
+          ? draft.category
+          : draft.status === "content"
+            ? "content"
+            : "general";
       newId = draft.client_id;
       savedId = draft.saved_id;
       const p = resolveAnchor(activeAnchor);
@@ -835,27 +877,14 @@ function start(siteId: string, base: string) {
     panel.replaceChildren(heading);
     panel.classList.remove("hide");
     const body = el("div", "", "body");
-    const status = el("div", "", "composer-status"),
-      choices = el("div", "", "status-grid");
-    status.append(el("label", "Choose status"), choices);
-    choices.setAttribute("role", "group");
-    choices.setAttribute("aria-label", "Choose status");
-    for (const value of ["open", "content"] as const) {
-      const choice = button(value[0].toUpperCase() + value.slice(1), () => {
-        newStatus = value;
-        saveNewDraft();
-        choices
-          .querySelectorAll("button")
-          .forEach((b) =>
-            b.setAttribute("aria-pressed", String(b.dataset.status === value)),
-          );
-        renderDots();
-      });
-      choice.dataset.status = value;
-      choice.setAttribute("aria-pressed", String(newStatus === value));
-      choice.disabled = !!savedId;
-      choices.append(choice);
-    }
+    const status = el("div", "", "composer-status");
+    const category = categorySelect(newCategory, "Comment category");
+    category.disabled = !!savedId;
+    category.onchange = () => {
+      newCategory = category.value as Category;
+      saveNewDraft();
+    };
+    status.append(el("label", "Category"), category);
     const input = el("textarea");
     input.placeholder = "What should change?";
     input.rows = 4;
@@ -937,6 +966,7 @@ function start(siteId: string, base: string) {
                 title: document.title.slice(0, 255) || location.hostname,
                 body: newBody.trim(),
                 status: newStatus,
+                category: newCategory,
                 client_id: newId,
                 anchor: activeAnchor,
               }),
@@ -984,6 +1014,7 @@ function start(siteId: string, base: string) {
           "Discard draft",
           () => {
             newBody = "";
+            newCategory = "general";
             pending.forEach((item) => URL.revokeObjectURL(item.url));
             pending = [];
             void persistDraftFiles().catch(() => {});
@@ -1066,7 +1097,7 @@ function start(siteId: string, base: string) {
       c = t.comment;
     panel.classList.remove("hide", "composer");
     panel.classList.add("thread");
-    const header = titlebar("#" + c.id, closePanel);
+    const header = titlebar("#" + c.comment_number, closePanel);
     header.classList.add("thread-header");
     const stamp = el(
       "span",
@@ -1094,13 +1125,14 @@ function start(siteId: string, base: string) {
       .filter(
         (item) =>
           ((showClosed || item.status !== "closed") &&
+            (!categoryFilter || item.category === categoryFilter) &&
             (!unreadOnly || isUnread(item)) &&
-            ("#" + item.id + " " + item.body + " " + item.name)
+            ("#" + item.comment_number + " " + item.body + " " + item.name)
               .toLowerCase()
               .includes(search.toLowerCase())) ||
           item.id === c.id,
       )
-      .sort((a, b) => a.id - b.id);
+      .sort((a, b) => a.comment_number - b.comment_number);
     if (!ordered.some((item) => item.id === c.id)) ordered.push(c);
     const index = ordered.findIndex((item) => item.id === c.id);
     const prev = button("← Previous", () => openThread(ordered[index - 1].id)),
@@ -1202,7 +1234,10 @@ function start(siteId: string, base: string) {
     controls.prepend(refresh);
     details.append(controls);
     const author = el("div", "", "author-row");
-    author.append(el("strong", c.name));
+    author.append(
+      el("strong", c.name),
+      el("span", categoryName(c.category), "category-badge"),
+    );
     const pencil = Array.from(controls.querySelectorAll("button")).find(
       (b) => b.textContent === "Edit comment",
     );
@@ -1511,7 +1546,26 @@ function start(siteId: string, base: string) {
       upload,
     );
     const statusSection = el("section", "", "status-section");
-    statusSection.append(el("label", "Change status"));
+    const categoryControl = el("div", "", "thread-category");
+    const category = categorySelect(c.category, "Comment category");
+    category.onchange = () => {
+      const selected = category.value as Category;
+      void perform(async () => {
+        try {
+          thread = await request<Thread>("/comments/" + c.id + "/category", {
+            method: "PATCH",
+            body: json({ category: selected, version: c.version }),
+          });
+          renderThread();
+          await load();
+        } catch (error) {
+          category.value = c.category;
+          throw error;
+        }
+      });
+    };
+    categoryControl.append(el("label", "Category"), category);
+    statusSection.append(categoryControl, el("label", "Change status"));
     const statusGrid = el("div", "", "status-grid");
     for (const s of statuses) {
       const b = button(s[0].toUpperCase() + s.slice(1), async () => {
@@ -1937,15 +1991,17 @@ function start(siteId: string, base: string) {
                 ? "resolved"
                 : event.type === "status"
                   ? "changed"
-                  : event.type === "move"
-                    ? "moved"
-                    : "edited";
+                  : event.type === "category"
+                    ? "categorized"
+                    : event.type === "move"
+                      ? "moved"
+                      : "edited";
         const heading =
           event.name +
           " " +
           action +
           " #" +
-          event.comment_id +
+          event.comment_number +
           (event.type === "resolution"
             ? " with a note"
             : event.type === "status" && status
@@ -2146,6 +2202,14 @@ function start(siteId: string, base: string) {
       unreadTools,
       add,
     );
+    const categoryControl = el("div", "", "category-filter");
+    const category = categorySelect(categoryFilter, "Filter by category", true);
+    category.onchange = () => {
+      categoryFilter = category.value as Category | "";
+      renderSidebar();
+    };
+    categoryControl.append(el("label", "Category"), category);
+    localHeader.append(categoryControl);
     const resume = body.querySelector(".resume-draft");
     if (resume) localHeader.append(resume);
     sidebar.append(localHeader);
@@ -2157,8 +2221,9 @@ function start(siteId: string, base: string) {
       const shown = comments.filter(
         (c) =>
           (showClosed || c.status !== "closed") &&
+          (!categoryFilter || c.category === categoryFilter) &&
           (!unreadOnly || isUnread(c)) &&
-          ("#" + c.id + " " + c.body + " " + c.name)
+          ("#" + c.comment_number + " " + c.body + " " + c.name)
             .toLowerCase()
             .includes(search.toLowerCase()),
       );
@@ -2198,10 +2263,12 @@ function start(siteId: string, base: string) {
           b.dataset.status = s;
           b.style.setProperty("--dot-color", dotColors[s]);
           b.setAttribute("aria-pressed", String(thread?.comment.id === c.id));
-          b.append(
-            el("strong", "#" + c.id + " · " + c.name),
-            el("span", c.body),
+          const meta = el("div", "", "comment-row-meta");
+          meta.append(
+            el("strong", "#" + c.comment_number + " · " + c.name),
+            el("small", categoryName(c.category), "category-badge"),
           );
+          b.append(meta, el("span", c.body));
           if (isUnread(c)) {
             const badge = el("span", "", "unread-dot");
             badge.setAttribute("role", "img");
@@ -2250,7 +2317,8 @@ function start(siteId: string, base: string) {
           "row",
         );
         b.append(
-          el("strong", "#" + result.id + " · " + result.title),
+          el("strong", "#" + result.comment_number + " · " + result.title),
+          el("small", categoryName(result.category), "category-badge"),
           el("span", result.body),
         );
         globalResults.append(b);
@@ -2320,7 +2388,7 @@ function start(siteId: string, base: string) {
       }
     }
     const totals = el("div", "", "site-totals");
-    for (const status of ["open", "review", "content"] as const) {
+    for (const status of ["open", "review"] as const) {
       const count = pages.reduce(
         (sum, page) => sum + Number(page.counts[status] || 0),
         0,
@@ -2493,10 +2561,10 @@ function start(siteId: string, base: string) {
         "span",
         current.anchor
           ? "Preview for #" +
-              current.original.comment.id +
+              current.original.comment.comment_number +
               ". Click another position or confirm."
           : "Select a new target for #" +
-              current.original.comment.id +
+              current.original.comment.comment_number +
               ". Escape to cancel.",
       ),
     );
@@ -2839,6 +2907,8 @@ function start(siteId: string, base: string) {
         })
         .catch(showError);
   }
+  // Restore the launcher/sidebar state before asynchronous feedback arrives.
+  renderSidebar();
   if (guest)
     void load()
       .then(() => {

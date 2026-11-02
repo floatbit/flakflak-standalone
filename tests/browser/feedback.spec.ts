@@ -241,7 +241,13 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
     .getByRole("dialog", { name: "Attachments" })
     .getByRole("button", { name: "Close", exact: true })
     .click();
-  await page.getByRole("button", { name: "Content", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Comment category", exact: true })
+    .selectOption("content");
+  await expect(page.locator(".author-row .category-badge")).toHaveText(
+    "Content",
+  );
+  await page.getByRole("button", { name: "Review", exact: true }).click();
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.getByRole("button", { name: "Closed", exact: true }).click();
   await page
@@ -259,7 +265,7 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
   ).toHaveCount(0);
 
   await page.getByRole("button", { name: /Show earlier replies/ }).click();
-  await expect(page.locator(".history-status")).toHaveCount(4);
+  await expect(page.locator(".history-status")).toHaveCount(3);
   for (const theme of [
     "windowsxp",
     "macos9",
@@ -281,8 +287,8 @@ test("dashboard, guest comment, reply, resolution, file gallery, reload, and sec
           ]),
         ),
       );
-    expect(Object.keys(statusColors)).toHaveLength(4);
-    expect(new Set(Object.values(statusColors)).size).toBe(4);
+    expect(Object.keys(statusColors)).toHaveLength(3);
+    expect(new Set(Object.values(statusColors)).size).toBe(3);
     await expect(
       page.locator('.status-grid button[aria-pressed="true"]'),
     ).toHaveCSS("color", "rgb(255, 255, 255)");
@@ -389,7 +395,7 @@ test("settings persist, stay isolated from the host page, and fit review navigat
     origin: appOrigin,
     name: "Settings tester",
   });
-  for (const [index, status] of ["open", "content"].entries()) {
+  for (const [index, category] of ["general", "content"].entries()) {
     const result = await request.post(
       backend + "/api/v1/sites/" + siteId + "/comments",
       {
@@ -398,7 +404,8 @@ test("settings persist, stay isolated from the host page, and fit review navigat
           url: appOrigin + "/demo.html?site=" + siteId,
           title: "Settings demo",
           body: "Settings navigation " + index,
-          status,
+          status: "open",
+          category,
           client_id: crypto.randomUUID(),
           anchor: {
             selector: "#intro p",
@@ -547,8 +554,14 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
   await expect(
     dialog.getByRole("button", { name: "Reply", exact: true }),
   ).toBeEnabled();
-  const id = Number(
+  const number = Number(
     (await dialog.locator(".titlebar strong").innerText()).match(/#(\d+)/)![1],
+  );
+  const id = Number(
+    await page
+      .locator(".dot[data-comment-id]")
+      .first()
+      .getAttribute("data-comment-id"),
   );
   const identity = await page.evaluate(
     (id) => JSON.parse(localStorage.getItem("flakflak:member:" + id)!),
@@ -691,7 +704,7 @@ test("ownership, reattachment cancel/confirm, dragging, reply pages and failed-u
     dialog.getByRole("button", { name: "Reply", exact: true }),
   ).toBeEnabled();
   const dot = page.getByRole("button", {
-    name: new RegExp("Open comment #" + id + " · open"),
+    name: new RegExp("Open comment #" + number + " · open"),
   });
   const point = await dot.boundingBox(),
     target = await page.locator("#one p").boundingBox();
@@ -1013,7 +1026,7 @@ test.describe("WordPress reference appearance", () => {
           backend + prefix + "/comments/" + c.id + "/status",
           { headers, data: { status: "closed", version: 1 } },
         );
-      else openId = c.id;
+      else openId = c.comment_number;
     }
     await page.addInitScript(
       ({ site, person }) => {
@@ -1082,12 +1095,11 @@ test.describe("WordPress reference appearance", () => {
       .fill("test");
     expect((await panel.boundingBox())!.width).toBe(320);
     await expect(
-      panel.getByRole("button", { name: "Open", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
+      panel.getByRole("combobox", { name: "Comment category", exact: true }),
+    ).toHaveValue("general");
     await expect(
       panel.getByRole("button", { name: "Content", exact: true }),
-    ).toBeVisible();
-    await expect(panel.getByRole("combobox")).toHaveCount(0);
+    ).toHaveCount(0);
     await expect(
       panel.getByRole("button", { name: "Add files", exact: true }),
     ).toBeVisible();
@@ -1121,6 +1133,169 @@ test("sidebar open and closed state survives reload and navigation", async ({
   await expect(launcher).toBeVisible();
   await page.reload();
   await expect(launcher).toHaveAttribute("aria-expanded", "false");
+});
+
+test("site comment numbers continue across pages while shared links keep internal IDs", async ({
+  page,
+  request,
+}) => {
+  const person = seedAccount({
+    site: siteId,
+    origin: appOrigin,
+    name: "Numbering tester",
+  });
+  const headers = {
+    Origin: appOrigin,
+    Authorization: "Bearer " + person.token,
+  };
+  const firstPage = appOrigin + "/demo.html?site=" + siteId;
+  const secondPage = firstPage + "&variant=second";
+  const comments = [];
+  for (let i = 1; i <= 3; i++) {
+    const response = await request.post(
+      backend + "/api/v1/sites/" + siteId + "/comments",
+      {
+        headers,
+        data: {
+          url: i === 3 ? secondPage : firstPage,
+          title: i === 3 ? "Second page" : "First page",
+          body: "Numbering " + i,
+          status: "open",
+          client_id: crypto.randomUUID(),
+          anchor: {
+            selector: "#intro p",
+            text: "Mark this text, leave a reply, or attach a screenshot.",
+            x: 0.5,
+            y: 0.5,
+            documentX: 600,
+            documentY: 550,
+            viewportWidth: 1280,
+          },
+        },
+      },
+    );
+    expect(response.status()).toBe(201);
+    const comment = await response.json();
+    expect(comment.comment_number).toBe(i);
+    comments.push(comment);
+  }
+  await page.goto(firstPage);
+  await expect(
+    page.getByRole("button", { name: "Open comment #1 · open", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open comment #2 · open", exact: true }),
+  ).toBeVisible();
+  await openSidebar(page);
+  const sidebar = page.locator(".sidebar");
+  await expect(
+    sidebar.locator(".comment-row strong").filter({ hasText: "#1 ·" }),
+  ).toBeVisible();
+  const search = sidebar.getByRole("searchbox", {
+    name: "Search this page",
+    exact: true,
+  });
+  await search.fill("#2");
+  await expect(sidebar.locator(".comment-row")).toHaveCount(1);
+  await expect(sidebar.locator(".comment-row strong")).toContainText("#2 ·");
+  await search.fill("");
+  await sidebar
+    .getByRole("searchbox", { name: "Search all pages", exact: true })
+    .fill("#3");
+  await sidebar.getByRole("button", { name: /#3 · Second page/ }).click();
+  await expect(page).toHaveURL(
+    secondPage + "#flakflak-comment-" + comments[2].id,
+  );
+  const panel = page.getByRole("dialog", { name: "Comment", exact: true });
+  await expect(panel.locator(".titlebar strong")).toHaveText("#3");
+  await expect(
+    page.getByRole("button", { name: "Open comment #3 · open", exact: true }),
+  ).toBeVisible();
+  await sidebar.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(
+    sidebar.getByRole("button", { name: /Numbering tester added #3/ }),
+  ).toBeVisible();
+});
+
+test("categories default to General, survive drafts, and filter independently from status", async ({
+  page,
+}) => {
+  await page.goto(appOrigin + "/demo.html?site=" + siteId);
+  await page
+    .locator("#intro p")
+    .click({ modifiers: ["Shift"], position: { x: 80, y: 10 } });
+  const panel = page.getByRole("dialog", { name: "Comment", exact: true });
+  const category = panel.getByRole("combobox", {
+    name: "Comment category",
+    exact: true,
+  });
+  await expect(category).toHaveValue("general");
+  await category.selectOption("design");
+  await panel
+    .getByRole("textbox", { name: "Comment", exact: true })
+    .fill("Adjust this spacing");
+  await panel.getByRole("button", { name: "Close", exact: true }).click();
+  await page.reload();
+  await page
+    .locator("#intro p")
+    .click({ modifiers: ["Shift"], position: { x: 80, y: 10 } });
+  await expect(category).toHaveValue("design");
+  await panel.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(panel.locator(".author-row .category-badge")).toHaveText(
+    "Design",
+  );
+  await expect(panel.locator(".status-grid button")).toHaveCount(3);
+  await category.selectOption("content");
+  await expect(panel.locator(".author-row .category-badge")).toHaveText(
+    "Content",
+  );
+  await expect(
+    panel.getByRole("button", { name: "Open", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await panel.getByRole("button", { name: "Review", exact: true }).click();
+  await expect(
+    panel.getByRole("button", { name: "Review", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(category).toHaveValue("content");
+  await panel.getByRole("button", { name: "Close", exact: true }).click();
+  await openSidebar(page);
+  const sidebar = page.locator(".sidebar");
+  const filter = sidebar.getByRole("combobox", {
+    name: "Filter by category",
+    exact: true,
+  });
+  await filter.selectOption("general");
+  await expect(sidebar.locator(".comment-row")).toHaveCount(0);
+  await filter.selectOption("content");
+  await expect(sidebar.locator(".comment-row")).toHaveCount(1);
+  await expect(
+    sidebar.locator('.comment-row[data-status="review"] .category-badge'),
+  ).toHaveText("Content");
+  const row = sidebar.locator(".comment-row");
+  for (const size of ["standard", "large"]) {
+    await page
+      .locator("[data-flakflak-root]")
+      .evaluate((host, value) => host.setAttribute("data-size", value), size);
+    const author = await row.locator("strong").boundingBox();
+    const badge = await row.locator(".category-badge").boundingBox();
+    const preview = await row.locator(":scope > span").boundingBox();
+    expect(badge!.x).toBeGreaterThanOrEqual(author!.x + author!.width + 7);
+    expect(preview!.y).toBeGreaterThanOrEqual(
+      Math.max(author!.y + author!.height, badge!.y + badge!.height) + 4,
+    );
+    expect(
+      Math.abs(badge!.x + badge!.width - preview!.x - preview!.width),
+    ).toBeLessThan(1);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const badgeBounds = await row.locator(".category-badge").boundingBox();
+  const previewBounds = await row.locator(":scope > span").boundingBox();
+  expect(previewBounds!.y).toBeGreaterThanOrEqual(
+    badgeBounds!.y + badgeBounds!.height + 4,
+  );
+  await expect(sidebar.locator(".site-total")).toHaveCount(2);
+  await filter.selectOption("");
+  await expect(sidebar.locator(".comment-row")).toHaveCount(1);
 });
 
 test("floating feedback button follows sidebar side and becomes icon-only on mobile", async ({

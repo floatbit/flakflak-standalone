@@ -1,4 +1,5 @@
-export type Status = "open" | "review" | "content" | "closed";
+export type Status = "open" | "review" | "closed";
+export type Category = "general" | "content" | "design" | "functionality";
 export interface Site {
   id: string;
   name: string;
@@ -27,11 +28,13 @@ export interface Anchor {
 }
 export interface Comment {
   id: number;
+  comment_number: number;
   page_id: number;
   participant_id: string;
   name: string;
   body: string;
   status: Status;
+  category: Category;
   anchor: Anchor;
   version: number;
   created_at: string;
@@ -72,6 +75,7 @@ export interface Activity {
   unread: boolean;
   id: number;
   comment_id: number;
+  comment_number: number;
   name: string;
   type: string;
   summary: string;

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Support\Accounts;
+use App\Support\FeedbackReset;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -261,5 +262,94 @@ class FeedbackTest extends TestCase
         $s = $this->site();
         $g = $this->guest($s);
         $this->withToken($g['token'])->postJson('/api/v1/sites/'.$s.'/comments', ['url' => 'http://review.test', 'title' => 'A', 'body' => 'x', 'status' => 'open', 'client_id' => (string) Str::uuid(), 'anchor' => ['selector' => '#x', 'x' => 2, 'y' => 0, 'documentX' => 0, 'documentY' => 0, 'viewportWidth' => 1200]])->assertUnprocessable();
+    }
+
+    public function test_categories_are_independent_from_workflow_and_versioned(): void
+    {
+        $s = $this->site();
+        $g = $this->guest($s);
+        $c = $this->comment($s, $g);
+        $this->assertSame('general', $c['category']);
+        $path = '/api/v1/sites/'.$s.'/comments/'.$c['id'];
+        $this->patchJson($path.'/category', ['category' => 'content', 'version' => 1])->assertOk()->assertJsonPath('comment.category', 'content')->assertJsonPath('comment.status', 'open')->assertJsonPath('comment.version', 2);
+        $this->patchJson($path.'/category', ['category' => 'design', 'version' => 1])->assertConflict();
+        $this->patchJson($path.'/category', ['category' => 'invalid', 'version' => 2])->assertUnprocessable();
+        $this->patchJson($path.'/status', ['status' => 'content', 'version' => 2])->assertUnprocessable();
+        $this->patchJson($path.'/status', ['status' => 'review', 'version' => 2])->assertOk()->assertJsonPath('comment.category', 'content');
+        $this->getJson('/api/v1/sites/'.$s.'/pages')->assertOk()->assertJsonPath('0.counts.review', 1)->assertJsonMissingPath('0.counts.content');
+        $this->getJson('/api/v1/sites/'.$s.'/search?query=Improve&category=content')->assertOk()->assertJsonPath('results.0.category', 'content');
+        $this->getJson('/api/v1/sites/'.$s.'/search?query=Improve&category=design')->assertOk()->assertJsonCount(0, 'results');
+        $this->assertDatabaseHas('replies', ['comment_id' => $c['id'], 'kind' => 'category', 'body' => 'Category updated to content.']);
+        $otherSite = $this->site();
+        $this->guest($otherSite);
+        $this->patchJson('/api/v1/sites/'.$otherSite.'/comments/'.$c['id'].'/category', ['category' => 'design', 'version' => 3])->assertNotFound();
+    }
+
+    public function test_category_migration_preserves_feedback_and_converts_only_content_status(): void
+    {
+        $s = $this->site();
+        $g = $this->guest($s);
+        $content = $this->comment($s, $g);
+        $closed = $this->comment($s, $g);
+        DB::table('comments')->where('id', $content['id'])->update(['status' => 'content']);
+        DB::table('comments')->where('id', $closed['id'])->update(['status' => 'closed']);
+        $migration = require database_path('migrations/2026_11_01_000000_add_comment_categories.php');
+        $migration->down();
+        $migration->up();
+        $this->assertDatabaseHas('comments', ['id' => $content['id'], 'status' => 'open', 'category' => 'content', 'version' => 2, 'body' => $content['body']]);
+        $this->assertDatabaseHas('comments', ['id' => $closed['id'], 'status' => 'closed', 'category' => 'general', 'version' => 1]);
+        $this->assertDatabaseCount('comments', 2);
+    }
+
+    public function test_comment_numbers_continue_across_pages_and_never_reuse_deleted_numbers(): void
+    {
+        $site = $this->site();
+        $person = $this->guest($site);
+        $uuid = (string) Str::uuid();
+        $first = $this->comment($site, $person, $uuid);
+        $this->assertSame(1, $first['comment_number']);
+        $again = $this->comment($site, $person, $uuid);
+        $this->assertSame($first['id'], $again['id']);
+        $this->assertSame(1, $again['comment_number']);
+        $otherSite = $this->site();
+        $other = $this->guest($otherSite);
+        $this->assertSame(1, $this->comment($otherSite, $other)['comment_number']);
+        $create = function (string $url) use ($site, $person, $first) {
+            return $this->withToken($person['token'])->withHeader('Origin', 'http://review.test')->postJson('/api/v1/sites/'.$site.'/comments', ['url' => $url, 'title' => 'Another page', 'body' => 'New feedback', 'status' => 'open', 'client_id' => (string) Str::uuid(), 'anchor' => $first['anchor']])->assertCreated()->json();
+        };
+        $second = $create('http://review.test/second');
+        $this->assertSame(2, $second['comment_number']);
+        $this->assertNotSame($second['id'], $second['comment_number']);
+        $this->patchJson('/api/v1/sites/'.$site.'/comments/'.$second['id'].'/status', ['status' => 'closed', 'version' => 1])->assertOk()->assertJsonPath('comment.comment_number', 2);
+        $this->deleteJson('/api/v1/sites/'.$site.'/comments/'.$second['id'])->assertOk();
+        $third = $create('http://review.test/third');
+        $this->assertSame(3, $third['comment_number']);
+        $this->getJson('/api/v1/sites/'.$site.'/comments/'.$third['id'])->assertOk()->assertJsonPath('comment.id', $third['id'])->assertJsonPath('comment.comment_number', 3);
+        $this->getJson('/api/v1/sites/'.$site.'/search?query=%233')->assertOk()->assertJsonPath('results.0.id', $third['id'])->assertJsonPath('results.0.comment_number', 3)->assertJsonCount(1, 'results');
+        $this->getJson('/api/v1/sites/'.$site.'/activity')->assertOk()->assertJsonPath('events.0.comment_id', $third['id'])->assertJsonPath('events.0.comment_number', 3);
+        $this->assertDatabaseHas('sites', ['id' => $site, 'next_comment_number' => 4]);
+        FeedbackReset::run($site);
+        $this->assertSame(4, $create('http://review.test/fresh')['comment_number']);
+    }
+
+    public function test_comment_number_migration_uses_creation_order_without_changing_ids(): void
+    {
+        $site = $this->site();
+        $person = $this->guest($site);
+        $later = $this->comment($site, $person);
+        $earlier = $this->comment($site, $person);
+        DB::table('comments')->where('id', $later['id'])->update(['created_at' => '2026-10-30 10:00:00']);
+        DB::table('comments')->where('id', $earlier['id'])->update(['created_at' => '2026-10-29 10:00:00']);
+        $otherSite = $this->site();
+        $other = $this->guest($otherSite);
+        $separate = $this->comment($otherSite, $other);
+        $migration = require database_path('migrations/2026_11_01_000001_add_site_comment_numbers.php');
+        $migration->down();
+        $migration->up();
+        $this->assertDatabaseHas('comments', ['id' => $earlier['id'], 'comment_number' => 1, 'body' => $earlier['body']]);
+        $this->assertDatabaseHas('comments', ['id' => $later['id'], 'comment_number' => 2]);
+        $this->assertDatabaseHas('comments', ['id' => $separate['id'], 'comment_number' => 1]);
+        $this->assertDatabaseHas('sites', ['id' => $site, 'next_comment_number' => 3]);
+        $this->assertSame(3, $this->comment($site, $person)['comment_number']);
     }
 }

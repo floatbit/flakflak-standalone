@@ -67,8 +67,8 @@ class FeedbackController extends Controller
 
     private function commentData($c): array
     {
-        return ['id' => $c->id, 'page_id' => $c->page_id, 'participant_id' => $c->participant_id, 'name' => $c->author_name ?? DB::table('participants')->where('id', $c->participant_id)->value('name'),
-            'body' => $c->body, 'status' => $c->status, 'anchor' => json_decode($c->anchor, true), 'version' => $c->version, 'created_at' => $c->created_at];
+        return ['id' => $c->id, 'comment_number' => (int) ($c->comment_number ?? $c->id), 'page_id' => $c->page_id, 'participant_id' => $c->participant_id, 'name' => $c->author_name ?? DB::table('participants')->where('id', $c->participant_id)->value('name'),
+            'body' => $c->body, 'status' => $c->status, 'category' => $c->category, 'anchor' => json_decode($c->anchor, true), 'version' => $c->version, 'created_at' => $c->created_at];
     }
 
     public function comments(Request $r, string $site)
@@ -102,8 +102,8 @@ class FeedbackController extends Controller
 
     public function createComment(Request $r, string $site)
     {
-        $v = $r->validate(['url' => 'required|string|max:2000', 'title' => 'required|string|max:255', 'body' => 'required|string|max:10000', 'status' => ['required', Rule::in(['open', 'content'])],
-            'client_id' => 'required|uuid', 'anchor' => 'required|array:selector,text,x,y,documentX,documentY,viewportWidth',
+        $v = $r->validate(['url' => 'required|string|max:2000', 'title' => 'required|string|max:255', 'body' => 'required|string|max:10000', 'status' => ['required', Rule::in(['open'])],
+            'category' => ['sometimes', Rule::in(['general', 'content', 'design', 'functionality'])], 'client_id' => 'required|uuid', 'anchor' => 'required|array:selector,text,x,y,documentX,documentY,viewportWidth',
             'anchor.selector' => 'required|string|max:1500', 'anchor.text' => 'nullable|string|max:160', 'anchor.x' => 'required|numeric|between:0,1', 'anchor.y' => 'required|numeric|between:0,1',
             'anchor.documentX' => 'required|numeric|min:0', 'anchor.documentY' => 'required|numeric|min:0', 'anchor.viewportWidth' => 'required|numeric|min:1']);
         $url = $this->pageUrl($r, $v['url']);
@@ -115,9 +115,12 @@ class FeedbackController extends Controller
 
                 return $existing->id;
             }
+            $counter = DB::table('sites')->where('id', $site)->lockForUpdate()->firstOrFail();
+            $number = (int) $counter->next_comment_number;
+            DB::table('sites')->where('id', $site)->update(['next_comment_number' => $number + 1]);
             DB::table('pages')->insertOrIgnore(['site_id' => $site, 'url' => $url, 'url_hash' => hash('sha256', $url), 'title' => $v['title'], 'created_at' => now(), 'updated_at' => now()]);
             $page = DB::table('pages')->where('site_id', $site)->where('url_hash', hash('sha256', $url))->first();
-            $id = DB::table('comments')->insertGetId(['site_id' => $site, 'page_id' => $page->id, 'participant_id' => $person->id, 'client_id' => $v['client_id'], 'body' => $v['body'], 'status' => $v['status'], 'anchor' => json_encode($v['anchor']), 'created_at' => now(), 'updated_at' => now()]);
+            $id = DB::table('comments')->insertGetId(['site_id' => $site, 'comment_number' => $number, 'page_id' => $page->id, 'participant_id' => $person->id, 'client_id' => $v['client_id'], 'body' => $v['body'], 'status' => $v['status'], 'category' => $v['category'] ?? 'general', 'anchor' => json_encode($v['anchor']), 'created_at' => now(), 'updated_at' => now()]);
             $this->event($site, $id, $person->id, 'comment', 'Added a comment');
 
             return $id;
@@ -163,7 +166,7 @@ class FeedbackController extends Controller
 
     public function status(Request $r, string $site, string $comment)
     {
-        $v = $r->validate(['status' => ['required', Rule::in(['open', 'review', 'content', 'closed'])], 'version' => 'required|integer|min:1', 'note' => 'nullable|string|max:10000']);
+        $v = $r->validate(['status' => ['required', Rule::in(['open', 'review', 'closed'])], 'version' => 'required|integer|min:1', 'note' => 'nullable|string|max:10000']);
         $p = $r->attributes->get('participant');
         DB::transaction(function () use ($site, $comment, $v, $p) {
             $c = DB::table('comments')->where('site_id', $site)->where('id', $comment)->lockForUpdate()->firstOrFail();
@@ -176,6 +179,25 @@ class FeedbackController extends Controller
             $summary = 'Status updated to '.$v['status'].($note !== '' ? '. Resolution note: '.$note : '.');
             DB::table('replies')->insert(['comment_id' => $comment, 'participant_id' => $p->id, 'client_id' => (string) Str::uuid(), 'body' => $summary, 'kind' => 'status', 'created_at' => now(), 'updated_at' => now()]);
             $this->event($site, (int) $comment, $p->id, $note !== '' ? 'resolution' : 'status', $summary);
+        });
+
+        return $this->detail($r, $site, $comment);
+    }
+
+    public function category(Request $r, string $site, string $comment)
+    {
+        $v = $r->validate(['category' => ['required', Rule::in(['general', 'content', 'design', 'functionality'])], 'version' => 'required|integer|min:1']);
+        $p = $r->attributes->get('participant');
+        DB::transaction(function () use ($site, $comment, $v, $p) {
+            $c = DB::table('comments')->where('site_id', $site)->where('id', $comment)->lockForUpdate()->firstOrFail();
+            abort_unless((int) $c->version === (int) $v['version'], 409, 'This comment changed. Refresh before changing its category.');
+            if ($c->category === $v['category']) {
+                return;
+            }
+            DB::table('comments')->where('id', $comment)->update(['category' => $v['category'], 'version' => $c->version + 1, 'updated_at' => now()]);
+            $summary = 'Category updated to '.$v['category'].'.';
+            DB::table('replies')->insert(['comment_id' => $comment, 'participant_id' => $p->id, 'client_id' => (string) Str::uuid(), 'body' => $summary, 'kind' => 'category', 'created_at' => now(), 'updated_at' => now()]);
+            $this->event($site, (int) $comment, $p->id, 'category', $summary);
         });
 
         return $this->detail($r, $site, $comment);
@@ -227,22 +249,25 @@ class FeedbackController extends Controller
 
     public function search(Request $r, string $site)
     {
-        $v = $r->validate(['query' => 'required|string|min:1|max:200', 'page' => 'nullable|integer|min:1|max:10000']);
+        $v = $r->validate(['query' => 'required|string|min:1|max:200', 'category' => ['nullable', Rule::in(['general', 'content', 'design', 'functionality'])], 'page' => 'nullable|integer|min:1|max:10000']);
         $term = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], trim($v['query'])).'%';
         $q = DB::table('comments')->join('pages', 'pages.id', '=', 'comments.page_id')->join('participants', 'participants.id', '=', 'comments.participant_id')->where('comments.site_id', $site)
             ->where(function ($q) use ($term, $v) {
                 $q->whereRaw("comments.body LIKE ? ESCAPE '!'", [$term])->orWhereRaw("participants.name LIKE ? ESCAPE '!'", [$term])->orWhereRaw("pages.title LIKE ? ESCAPE '!'", [$term]);
                 if (ctype_digit(ltrim($v['query'], '#'))) {
-                    $q->orWhere('comments.id', (int) ltrim($v['query'], '#'));
+                    $q->orWhere('comments.comment_number', (int) ltrim($v['query'], '#'));
                 }
                 $q->orWhereExists(function ($sub) use ($term) {
                     $sub->selectRaw('1')->from('replies')->whereColumn('replies.comment_id', 'comments.id')->whereRaw("replies.body LIKE ? ESCAPE '!'", [$term]);
                 });
             });
+        if (! empty($v['category'])) {
+            $q->where('comments.category', $v['category']);
+        }
         $count = (clone $q)->count();
         $page = $r->integer('page', 1);
 
-        return ['results' => $q->orderByDesc('comments.id')->offset(($page - 1) * 20)->limit(20)->get(['comments.id', 'comments.body', 'comments.status', 'participants.name', 'pages.title', 'pages.url']), 'more' => $count > $page * 20, 'total' => $count];
+        return ['results' => $q->orderByDesc('comments.id')->offset(($page - 1) * 20)->limit(20)->get(['comments.id', 'comments.comment_number', 'comments.body', 'comments.status', 'comments.category', 'participants.name', 'pages.title', 'pages.url']), 'more' => $count > $page * 20, 'total' => $count];
     }
 
     public function updateSite(Request $r, string $site)
@@ -276,7 +301,7 @@ class FeedbackController extends Controller
         if ($r->input('before')) {
             $q->where('activity.id', '<', $r->integer('before'));
         }
-        $rows = $q->orderByDesc('activity.id')->limit(21)->addSelect(['activity.id', 'activity.comment_id', 'participants.name', 'activity.type', 'activity.summary', 'comments.body as comment_body', 'activity.created_at', 'pages.title', 'pages.url'])->get();
+        $rows = $q->orderByDesc('activity.id')->limit(21)->addSelect(['activity.id', 'activity.comment_id', 'comments.comment_number', 'participants.name', 'activity.type', 'activity.summary', 'comments.body as comment_body', 'activity.created_at', 'pages.title', 'pages.url'])->get();
 
         return ['events' => $rows->take(20)->map(function ($row) {
             $row->unread = (bool) $row->unread;

@@ -56,7 +56,8 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--ff-accent);
   outline-offset: 3px;
 }
@@ -237,7 +238,7 @@ label {
 }
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 5px;
 }
 .status-grid button {
@@ -823,14 +824,25 @@ button[aria-label="Close"]:hover {
   background: var(--dot-color);
   margin-top: 5px;
 }
-.comment-row strong {
+.comment-row-meta {
   grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.comment-row strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
   font-weight: 400;
   color: var(--ff-muted);
 }
 .comment-row > span {
   grid-column: 2;
+  grid-row: 2;
   font-size: 14px;
   line-height: 1.5;
   color: var(--ff-text);
@@ -2427,4 +2439,50 @@ progress::-moz-progress-bar {
   .launcher-label {
     display: none;
   }
+}
+
+/* Categories identify the work; dot colors and workflow controls indicate status. */
+.category-badge {
+  display: inline-block !important;
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid var(--ff-border);
+  border-radius: 5px;
+  background: var(--ff-control);
+  color: var(--ff-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.comment-row .category-badge {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.author-row .category-badge {
+  margin-left: 8px;
+}
+.category-filter {
+  margin-top: 16px;
+}
+.category-filter label,
+.thread-category label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ff-muted);
+}
+.category-filter select,
+.thread-category select,
+.composer-status select {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--ff-border);
+  border-radius: 6px;
+  background: var(--ff-control);
+  color: var(--ff-text);
+  font: inherit;
+}
+.thread-category {
+  margin-bottom: 20px;
 }

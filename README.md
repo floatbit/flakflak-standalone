@@ -91,3 +91,15 @@ plugin and its database remain independent and unchanged.
 ## Private email accounts
 
 The standalone app now requires verified email accounts and per-site invitations. Email magic links replace the owner-key dashboard and name-only widget. See [Authentication and rollout](docs/AUTHENTICATION.md) for local mail-log testing, invitations, reset behavior, and the ServerPilot ownership cutover. Existing accounts/sites are not reset by deployment.
+
+## Feedback categories
+
+Each comment has an independent category (General, Content, Design, Functionality) and status (Open, Review, Closed). New comments start as Open / General. Choose a category in the composer or change it in an existing thread. Members can update categories; changes are versioned and appear in history/activity. The sidebar's Category filter narrows the current-page comment list; all-page status totals and completion progress remain site-wide.
+
+The category migration preserves existing comments. Content statuses become Open with category Content, and all other existing comments default to General. Earlier Content status history remains historical text. Dot colors indicate workflow status, not category. Progress is Closed divided by total comments across all categories. Run `php artisan migrate` locally; normal ServerPilot deployment runs the migration automatically. Reload existing widget pages after deploying this change so cached builds stop offering Content as a status.
+
+## Comment numbers
+
+Comment labels are permanent site-wide numbers, separate from database IDs: two dots on one page can be #1 and #2, and the next dot on another page of that same site is #3. A different site starts at #1. Numbers stay the same when a comment changes status, category, position, or page layout. Deleting a comment leaves a gap; its number is never reused. Reset feedback retains the site's sequence too. Starting over with a new site starts a new sequence.
+
+The migration assigns existing comments numbers in creation order, breaking timestamp ties by ID. IDs, replies, attachments, read tracking, and existing `#flakflak-comment-ID` links are preserved. New copy links continue using internal IDs so old and new links share the same stable format. Search by # uses the visible site number. Deployment runs the migration automatically; reload embedded pages afterward to see the new labels.

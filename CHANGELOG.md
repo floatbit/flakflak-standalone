@@ -1,5 +1,22 @@
 # Changelog
 
+## Feedback categories and permanent site numbering
+
+Commit message: Add feedback categories and permanent site comment numbers
+
+- Assign permanent display numbers per site, continuing across pages and starting at #1 for each new site.
+- Backfill existing comments in creation order without changing IDs, relationships, or shared-link targets.
+- Reserve numbers with a locked site counter and unique constraint; retries do not consume another number, and deleted numbers are never reused.
+- Use display numbers in dots, threads, sidebar rows, search, activity, and repositioning prompts while keeping internal IDs for API calls and links.
+
+- Separate General, Content, Design, and Functionality categories from Open, Review, and Closed workflow statuses.
+- Place sidebar category badges beside the author, right aligned, with the clamped preview on its own row; prevent overlap at standard/large sizes and narrow widths.
+- Default new comments to General; add category selectors, sidebar badges/filtering, and category change history.
+- Preserve categories in recovered drafts, converting older Content drafts to Open with the Content category.
+- Migrate existing Content statuses to Open + Content; all other existing comments become General without changing their status.
+- Keep dot colors and progress totals tied to workflow; active totals now show Open and Review.
+- Restore sidebar visibility before asynchronous loading so a persisted open sidebar cannot be accidentally toggled closed during startup.
+
 ## Floating feedback button
 
 Commit message: Add floating feedback launcher with responsive layout

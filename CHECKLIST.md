@@ -69,3 +69,18 @@
 - [ ] Configure/verify production email sender and provider.
 - [ ] Deploy account release and claim live site ownership.
 - [ ] Explicitly reset legacy production feedback and invite actual members.
+
+## Feedback categories
+
+- [x] General default; Content, Design, and Functionality categories.
+- [x] Independent Open/Review/Closed workflow and progress totals.
+- [x] Category editing, history, sidebar badges/filter, and draft recovery.
+- [x] Local migration converting legacy Content statuses without deleting feedback.
+- [ ] Deploy category release and reload embedded pages.
+
+## Site comment numbering
+
+- [x] Permanent site-wide display numbers, independent of database IDs.
+- [x] Creation-order migration, atomic allocation, idempotent retries, and no reuse after deletion.
+- [x] Display-number search/activity and unchanged shared-link targets.
+- [ ] Deploy numbering migration and refresh embedded pages.

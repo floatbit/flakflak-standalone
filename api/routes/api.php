@@ -26,6 +26,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/sites', [F::class, 'createSite']);
         Route::patch('/sites/{site}', [F::class, 'updateSite']);
     });
+    Route::get('/sites/{site}/access', [A::class, 'access'])->middleware(['throttle:site-api', 'site.origin']);
+    Route::post('/sites/{site}/guests', [A::class, 'publicGuest'])->middleware(['throttle:public-guests', 'site.origin']);
     Route::post('/sites/{site}/auth/exchange', [A::class, 'exchange'])->middleware(['throttle:magic-verify', 'site.origin']);
     Route::prefix('/sites/{site}')->middleware(['throttle:site-api', 'site.origin', 'member'])->group(function () {
         Route::post('/auth/logout', [A::class, 'siteLogout']);

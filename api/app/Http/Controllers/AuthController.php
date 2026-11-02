@@ -77,9 +77,32 @@ class AuthController extends Controller
         return ['signed_out' => true];
     }
 
+    public function access(Request $r)
+    {
+        $site = $r->attributes->get('site');
+
+        return ['mode' => $site->mode];
+    }
+
+    public function publicGuest(Request $r, string $site)
+    {
+        abort_unless($r->attributes->get('site')->mode === 'public', 403, 'This is a private project. Sign in with an invited email.');
+        $v = $r->validate(['name' => 'required|string|max:100']);
+        $raw = Str::random(64);
+        $id = (string) Str::uuid();
+        $expires = now()->addDays(30);
+        DB::table('participants')->insert(['id' => $id, 'site_id' => $site, 'user_id' => null, 'name' => trim($v['name']), 'guest_origin' => $r->header('Origin'), 'token_hash' => hash('sha256', $raw), 'expires_at' => $expires, 'created_at' => now(), 'updated_at' => now()]);
+
+        return response()->json(['id' => $id, 'name' => trim($v['name']), 'token' => $raw, 'expires_at' => $expires->toISOString(), 'role' => 'guest'], 201);
+    }
+
     public function siteLogout(Request $r)
     {
-        DB::table('account_tokens')->where('id', $r->attributes->get('account_token')->id)->delete();
+        if ($token = $r->attributes->get('account_token')) {
+            DB::table('account_tokens')->where('id', $token->id)->delete();
+        } else {
+            DB::table('participants')->where('id', $r->attributes->get('participant')->id)->update(['token_hash' => hash('sha256', Str::random(64)), 'expires_at' => now(), 'updated_at' => now()]);
+        }
 
         return ['signed_out' => true];
     }

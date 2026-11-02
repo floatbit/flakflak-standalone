@@ -1,5 +1,14 @@
 # Changelog
 
+## Public and private project modes
+
+Commit message: Add immutable public and private project modes
+
+- Choose Public or Private at site creation, defaulting to Private; enforce immutability through the API and show the mode in the dashboard.
+- Keep every existing site private through an additive migration.
+- Let public-project visitors enter only a name, with browser sessions scoped to the site and origin; retain optional member sign-in.
+- Keep private projects invitation-only and preserve owner-only controls, contribution ownership, protected attachment fetches, expiry, and session revocation.
+
 ## Feedback categories and permanent site numbering
 
 Commit message: Add feedback categories and permanent site comment numbers

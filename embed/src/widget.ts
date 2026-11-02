@@ -373,6 +373,105 @@ function start(siteId: string, base: string) {
   async function ensureMember(): Promise<void> {
     if (guest) return;
     if (authentication) return authentication;
+    const access = await api<{ mode: "private" | "public" }>(
+      base,
+      sitePath + "/access",
+    );
+    if (authentication) return authentication;
+    if (access.mode === "private") return ensureAccount();
+    authentication = enterPublicName();
+    try {
+      await authentication;
+    } finally {
+      authentication = null;
+    }
+  }
+  function enterPublicName(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const backdrop = el("div", "", "backdrop");
+      const dialog = el("section", "", "name-dialog");
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+      dialog.setAttribute("aria-label", "Enter your name");
+      let submitting = false;
+      const cleanup = () => {
+        dialog.remove();
+        backdrop.remove();
+      };
+      const cancel = () => {
+        if (submitting) return;
+        cleanup();
+        reject(Error("Name entry cancelled."));
+      };
+      const form = el("form", "", "body public-name-form");
+      const label = el("label", "Your name");
+      const input = el("input");
+      input.type = "text";
+      input.required = true;
+      input.maxLength = 100;
+      input.autocomplete = "name";
+      input.setAttribute("aria-label", "Your name");
+      label.append(input);
+      const message = el(
+        "p",
+        "Enter your name to view and leave feedback on this public project.",
+      );
+      const submit = el("button", "Continue", "primary");
+      submit.type = "submit";
+      const signIn = button(
+        "Sign in as a member",
+        () => {
+          cleanup();
+          authentication = null;
+          void ensureAccount().then(resolve, reject);
+        },
+        "text-link",
+      );
+      form.append(message, label, submit, signIn);
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        if (!input.value.trim()) {
+          input.focus();
+          return;
+        }
+        submitting = true;
+        submit.disabled = true;
+        signIn.disabled = true;
+        input.disabled = true;
+        try {
+          guest = await api<WidgetSession>(base, sitePath + "/guests", {
+            method: "POST",
+            body: json({ name: input.value.trim() }),
+          });
+          store(identityKey, guest);
+          await load();
+          cleanup();
+          resolve();
+        } catch (error) {
+          guest = null;
+          store(identityKey, null);
+          message.textContent = (error as Error).message;
+          submitting = false;
+          submit.disabled = false;
+          signIn.disabled = false;
+          input.disabled = false;
+          input.focus();
+        }
+      };
+      dialog.onkeydown = (event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          if (!submit.disabled) cancel();
+        }
+      };
+      dialog.append(titlebar("Enter your name", cancel), form);
+      shadow.append(backdrop, dialog);
+      input.focus();
+    });
+  }
+  async function ensureAccount(): Promise<void> {
+    if (guest) return;
+    if (authentication) return authentication;
     authentication = new Promise<void>((resolve, reject) => {
       const backdrop = el("div", "", "backdrop"),
         dialog = el("section", "", "name-dialog"),

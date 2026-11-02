@@ -233,10 +233,10 @@ class FeedbackTest extends TestCase
         $this->assertDatabaseCount('attachments', 0);
     }
 
-    public function test_name_only_guest_creation_is_retired(): void
+    public function test_name_only_guest_creation_is_rejected_on_private_sites(): void
     {
         $site = $this->site();
-        $this->withToken('')->withHeader('Origin', 'http://review.test')->postJson('/api/v1/sites/'.$site.'/guests', ['name' => 'Uninvited'])->assertNotFound();
+        $this->withToken('')->withHeader('Origin', 'http://review.test')->postJson('/api/v1/sites/'.$site.'/guests', ['name' => 'Uninvited'])->assertForbidden();
         $this->getJson('/api/v1/sites/'.$site.'/config')->assertUnauthorized();
     }
 

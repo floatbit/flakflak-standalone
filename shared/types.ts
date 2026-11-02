@@ -1,11 +1,13 @@
 export type Status = "open" | "review" | "closed";
 export type Category = "general" | "content" | "design" | "functionality";
+export type SiteMode = "private" | "public";
 export interface Site {
   id: string;
   name: string;
   origins: string[];
   embed_url: string;
-  role?: "owner" | "member";
+  mode: SiteMode;
+  role?: "owner" | "member" | "guest";
   feedback_version?: number;
   participant_id?: string;
 }
@@ -15,7 +17,7 @@ export interface WidgetSession {
   token: string;
   expires_at: string;
   user_id?: number;
-  role?: "owner" | "member";
+  role?: "owner" | "member" | "guest";
 }
 export interface Anchor {
   selector: string;

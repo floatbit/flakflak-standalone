@@ -84,3 +84,11 @@
 - [x] Creation-order migration, atomic allocation, idempotent retries, and no reuse after deletion.
 - [x] Display-number search/activity and unchanged shared-link targets.
 - [ ] Deploy numbering migration and refresh embedded pages.
+
+## Project access modes
+
+- [x] Immutable Public/Private choice at creation; Private default.
+- [x] Public name-entry sessions with origin/site binding, expiry, and sign-out.
+- [x] Private invitation flow and owner controls remain protected.
+- [x] Apply access-mode migration to local MySQL; existing sites remain Private.
+- [ ] Deploy access-mode release; existing projects stay Private.

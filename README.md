@@ -25,7 +25,7 @@ cd ..
 npm run build
 ```
 
-Local MySQL uses `flakflak_local`. Credentials and the MAMP socket stay in ignored `api/.env`. Set `MAIL_MAILER=log` and `LOG_LEVEL=debug` for local magic-link email; read messages with `tail -f api/storage/logs/laravel.log`. Generate APP_KEY with `php artisan key:generate` for a fresh setup. Owner-key and name-only access are retired.
+Local MySQL uses `flakflak_local`. Credentials and the MAMP socket stay in ignored `api/.env`. Set `MAIL_MAILER=log` and `LOG_LEVEL=debug` for local magic-link email; read messages with `tail -f api/storage/logs/laravel.log`. Generate APP_KEY with `php artisan key:generate` for a fresh setup. Owner-key access is retired. Name-only feedback is available only on sites explicitly created as Public.
 
 Set these MAMP document roots and select **PHP 8.2 for the API host**. Where MAMP provides separate Site folder and Document root controls, set the API Site folder to `flakflak/api` and select `public` as its Document root subfolder so PHP retains access to framework files above public:
 
@@ -90,7 +90,7 @@ plugin and its database remain independent and unchanged.
 
 ## Private email accounts
 
-The standalone app now requires verified email accounts and per-site invitations. Email magic links replace the owner-key dashboard and name-only widget. See [Authentication and rollout](docs/AUTHENTICATION.md) for local mail-log testing, invitations, reset behavior, and the ServerPilot ownership cutover. Existing accounts/sites are not reset by deployment.
+The dashboard requires a verified email account. Private sites require per-site invitations, while Public sites let widget visitors enter a name without registering. Email magic links replace the owner-key dashboard. See [Authentication and rollout](docs/AUTHENTICATION.md) for local mail-log testing, invitations, reset behavior, and the ServerPilot ownership cutover. Existing accounts/sites are not reset by deployment.
 
 ## Feedback categories
 
@@ -103,3 +103,11 @@ The category migration preserves existing comments. Content statuses become Open
 Comment labels are permanent site-wide numbers, separate from database IDs: two dots on one page can be #1 and #2, and the next dot on another page of that same site is #3. A different site starts at #1. Numbers stay the same when a comment changes status, category, position, or page layout. Deleting a comment leaves a gap; its number is never reused. Reset feedback retains the site's sequence too. Starting over with a new site starts a new sequence.
 
 The migration assigns existing comments numbers in creation order, breaking timestamp ties by ID. IDs, replies, attachments, read tracking, and existing `#flakflak-comment-ID` links are preserved. New copy links continue using internal IDs so old and new links share the same stable format. Search by # uses the visible site number. Deployment runs the migration automatically; reload embedded pages afterward to see the new labels.
+
+## Public and private project modes
+
+Choose an access mode when creating a site. **Private is the default** and keeps the verified email + invitation flow. **Public** lets anyone on an allowed website enter a name to view feedback, add comments/replies/files, update status/category, and reposition dots. Names are not verified and do not grant another contributor's edit permissions. Public visitors have no dashboard, site-settings, invitation-management, or reset permissions.
+
+The choice is permanent: there is no mode toggle after creation, and the API rejects mode changes. Create a separate site if a different mode is needed. Existing sites remain Private when the migration runs. Public visitors do not need SMTP or an account; owners and invited members still use email sign-in to manage sites. Public widgets offer optional member sign-in for those accounts.
+
+A public name session lasts up to 30 days in that browser, is scoped to the exact website origin and site, and can be revoked with Sign out of this site. It cannot access a private site. Attachments still use bearer-authorized fetches; there are no unauthenticated permanent file links. Reset feedback removes public visitor identities, so they enter a name again. Public access remains available even after an invited account is removed, because anyone may join by name.

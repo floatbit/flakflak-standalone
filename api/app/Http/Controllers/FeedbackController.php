@@ -26,16 +26,16 @@ class FeedbackController extends Controller
 
     private function siteData($s): array
     {
-        return ['id' => $s->id, 'name' => $s->name, 'origins' => json_decode($s->origins, true), 'embed_url' => config('flakflak.embed_url'), 'feedback_version' => (int) $s->feedback_version, 'role' => Accounts::member((int) request()->attributes->get('account')?->id, $s->id)?->role, 'participant_id' => request()->attributes->get('participant')?->id];
+        return ['id' => $s->id, 'name' => $s->name, 'mode' => $s->mode, 'origins' => json_decode($s->origins, true), 'embed_url' => config('flakflak.embed_url'), 'feedback_version' => (int) $s->feedback_version, 'role' => request()->attributes->get('membership')?->role ?? Accounts::member((int) request()->attributes->get('account')?->id, $s->id)?->role, 'participant_id' => request()->attributes->get('participant')?->id];
     }
 
     public function createSite(Request $r)
     {
         abort_unless(trim($r->attributes->get('account')->name) !== '', 422, 'Enter your display name first.');
-        $v = $r->validate(['name' => 'required|string|max:100', 'origins' => 'required|array|min:1|max:20', 'origins.*' => 'required|string|max:500']);
+        $v = $r->validate(['name' => 'required|string|max:100', 'mode' => ['sometimes', Rule::in(['private', 'public'])], 'origins' => 'required|array|min:1|max:20', 'origins.*' => 'required|string|max:500']);
         $origins = array_values(array_unique(array_map(fn ($o) => PageUrl::origin($o), $v['origins'])));
         $id = (string) Str::uuid();
-        DB::table('sites')->insert(['id' => $id, 'name' => $v['name'], 'origins' => json_encode($origins), 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('sites')->insert(['id' => $id, 'name' => $v['name'], 'mode' => $v['mode'] ?? 'private', 'origins' => json_encode($origins), 'created_at' => now(), 'updated_at' => now()]);
 
         DB::table('memberships')->insert(['site_id' => $id, 'user_id' => $r->attributes->get('account')->id, 'role' => 'owner', 'accepted_at' => now()]);
 
@@ -273,7 +273,7 @@ class FeedbackController extends Controller
     public function updateSite(Request $r, string $site)
     {
         MembershipController::owner($r, $site);
-        $v = $r->validate(['name' => 'required|string|max:100', 'origins' => 'required|array|min:1|max:20', 'origins.*' => 'required|string|max:500']);
+        $v = $r->validate(['mode' => 'prohibited', 'name' => 'required|string|max:100', 'origins' => 'required|array|min:1|max:20', 'origins.*' => 'required|string|max:500']);
         abort_unless(DB::table('sites')->where('id', $site)->exists(), 404);
         DB::table('sites')->where('id', $site)->update(['name' => $v['name'], 'origins' => json_encode(array_values(array_unique(array_map(fn ($o) => PageUrl::origin($o), $v['origins'])))), 'updated_at' => now()]);
 

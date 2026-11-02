@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { api, json, readStored, store, ApiError } from "../../shared/api";
-import type { Site } from "../../shared/types";
+import type { Site, SiteMode } from "../../shared/types";
 type User = { id: number; name: string; email: string };
 type Person = User & { role: string; accepted_at: string };
 type Invitation = {
@@ -31,6 +31,7 @@ const name = ref(""),
   editing = ref(false),
   editName = ref(""),
   editOrigins = ref("");
+const mode = ref<SiteMode>("private");
 const inviteEmail = ref(""),
   members = ref<Person[]>([]),
   invitations = ref<Invitation[]>([]),
@@ -243,6 +244,7 @@ async function create() {
       method: "POST",
       body: json({
         name: name.value,
+        mode: mode.value,
         origins: origins.value
           .split(/[,\n]/)
           .map((s) => s.trim())
@@ -253,6 +255,7 @@ async function create() {
     await selectSite(site);
     name.value = "";
     origins.value = "";
+    mode.value = "private";
     notice.value = "Site created.";
   });
 }
@@ -385,8 +388,8 @@ window.addEventListener("storage", (event) => {
       <div class="eyebrow">YOUR FEEDBACK, IN ONE PLACE</div>
       <h1>{{ connection ? "Connect" : "Sites" }}<span>.</span></h1>
       <p class="intro">
-        Private feedback for your team. Sign in by email and access the sites
-        you’ve been invited to.
+        Website feedback for your team. Sign in to manage your sites and
+        invitations.
       </p>
       <p v-if="error" role="alert" class="error">{{ error }}</p>
       <p v-if="notice" role="status" class="notice">{{ notice }}</p>
@@ -418,8 +421,8 @@ window.addEventListener("storage", (event) => {
       <section v-else-if="!user" class="card access">
         <h2>Sign in or register</h2>
         <p>
-          We’ll email you a sign-in link. No password needed. A site invitation
-          is required to view feedback.
+          We’ll email you a sign-in link. No password needed. Private sites
+          require an invitation; public sites let visitors join by name.
         </p>
         <form @submit.prevent="sendLink">
           <label for="email">Email address</label
@@ -493,9 +496,10 @@ window.addEventListener("storage", (event) => {
               }}</span
               ><span
                 ><strong>{{ site.name }}</strong
-                ><small>{{
-                  site.role === "owner" ? "Owner" : "Member"
-                }}</small></span
+                ><small
+                  >{{ site.role === "owner" ? "Owner" : "Member" }} ·
+                  {{ site.mode === "public" ? "Public" : "Private" }}</small
+                ></span
               >
             </button>
           </section>
@@ -515,7 +519,31 @@ window.addEventListener("storage", (event) => {
               ></textarea
               ><small
                 >One origin per line, including http/https and any port.</small
-              ><button :disabled="busy">Create site</button>
+              >
+              <fieldset class="access-mode">
+                <legend>Access mode</legend>
+                <label
+                  ><input
+                    v-model="mode"
+                    type="radio"
+                    name="access-mode"
+                    value="private"
+                  />Private — sign-in and invitation required</label
+                >
+                <label
+                  ><input
+                    v-model="mode"
+                    type="radio"
+                    name="access-mode"
+                    value="public"
+                  />Public — anyone can join by entering their name</label
+                >
+                <small
+                  >This choice is permanent and cannot be changed after
+                  creation.</small
+                >
+              </fieldset>
+              <button :disabled="busy">Create site</button>
             </form>
           </section>
           <section v-if="selected" class="card installation">
@@ -525,6 +553,18 @@ window.addEventListener("storage", (event) => {
                 Copy embed code
               </button>
             </div>
+            <p class="site-mode">
+              <strong>{{
+                selected.mode === "public" ? "Public" : "Private"
+              }}</strong>
+              ·
+              {{
+                selected.mode === "public"
+                  ? "Visitors join by name."
+                  : "Sign-in and invitation required."
+              }}
+              Access mode cannot be changed.
+            </p>
             <template v-if="isOwner"
               ><button class="quiet" @click="edit">Edit site settings</button>
               <form v-if="editing" @submit.prevent="saveSettings">
@@ -624,7 +664,8 @@ window.addEventListener("storage", (event) => {
                   class="invitation-form"
                   @submit.prevent="invite(inviteEmail)"
                 >
-                  <label for="invite-email">Invite someone to this site by email</label
+                  <label for="invite-email"
+                    >Invite someone to this site by email</label
                   ><input
                     id="invite-email"
                     v-model="inviteEmail"
@@ -659,6 +700,6 @@ window.addEventListener("storage", (event) => {
         </div></template
       >
     </main>
-    <footer>FlakFlak · Private, invitation-only website feedback.</footer>
+    <footer>FlakFlak · Website feedback, in one place.</footer>
   </div>
 </template>

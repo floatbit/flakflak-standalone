@@ -56,7 +56,7 @@ comments, replies, uploads, statuses and dot positioning through normal MAMP hos
 Real ServerPilot deployment, physical devices, actual Safari and CMS integration
 verification are still separate checklist items.
 
-Latest verification (categories and site numbering): PHP 8.2 passes 32 tests / 308 assertions; Node passes 8 regression tests; Chromium, Firefox and WebKit pass all 45 browser workflows. Coverage includes categories and responsive badge alignment, General defaults and draft recovery, site-wide permanent numbering, creation-order backfill, retry/deletion/reset sequence behavior, display-number search and activity, and unchanged ID-based shared links. Frontend type checks and production builds pass. Original WordPress plugin working tree remains clean.
+Latest verification (permanent access modes): PHP 8.2 passes 34 tests / 355 assertions; Node passes 8 regression tests; Chromium, Firefox and WebKit pass all 48 browser workflows. Public mode coverage includes creation/default reset, name-only joining, commenting/replying, reload persistence and sign-out. API tests enforce immutable modes, Private defaults, public-session site/origin boundaries, private/owner access denial, protected media, contributor ownership, expiry, and revocation. Existing categories, numbering, invitations and private widget connections remain covered. Frontend type checks and production builds pass.
 
 ## Account test fixtures
 

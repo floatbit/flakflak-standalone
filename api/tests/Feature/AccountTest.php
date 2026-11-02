@@ -214,4 +214,61 @@ class AccountTest extends TestCase
         $this->assertSame($migrationCount, DB::table('migrations')->count());
         $this->assertFalse(app()->isDownForMaintenance());
     }
+
+    public function test_site_mode_defaults_private_and_cannot_be_changed(): void
+    {
+        $owner = $this->account();
+        $private = $this->site($owner);
+        $this->assertDatabaseHas('sites', ['id' => $private, 'mode' => 'private']);
+        $public = $this->dashboard($owner)->postJson('/api/v1/sites', ['name' => 'Public project', 'mode' => 'public', 'origins' => ['http://review.test', 'http://other.test']])->assertCreated()->assertJsonPath('mode', 'public')->json('id');
+        foreach ([[$private, 'public'], [$public, 'private']] as [$site, $mode]) {
+            $this->dashboard($owner)->patchJson('/api/v1/sites/'.$site, ['name' => 'Changed', 'origins' => ['http://review.test'], 'mode' => $mode])->assertUnprocessable();
+        }
+        $this->assertDatabaseHas('sites', ['id' => $private, 'mode' => 'private']);
+        $this->assertDatabaseHas('sites', ['id' => $public, 'mode' => 'public']);
+        $this->dashboard($owner)->patchJson('/api/v1/sites/'.$public, ['name' => 'Updated public', 'origins' => ['http://review.test']])->assertOk()->assertJsonPath('mode', 'public');
+        $this->postJson('/api/v1/sites', ['name' => 'Bad', 'mode' => 'invalid', 'origins' => ['http://review.test']])->assertUnprocessable();
+        $this->withToken('')->withHeader('Origin', 'http://review.test')->getJson('/api/v1/sites/'.$private.'/access')->assertOk()->assertExactJson(['mode' => 'private']);
+        $this->postJson('/api/v1/sites/'.$private.'/guests', ['name' => 'Visitor'])->assertForbidden();
+    }
+
+    public function test_public_name_sessions_work_but_never_grant_private_or_owner_access(): void
+    {
+        Storage::fake('local');
+        $owner = $this->account();
+        $private = $this->site($owner);
+        $public = $this->dashboard($owner)->postJson('/api/v1/sites', ['name' => 'Public project', 'mode' => 'public', 'origins' => ['http://review.test', 'http://other.test']])->assertCreated()->json('id');
+        $prefix = '/api/v1/sites/'.$public;
+        $this->withToken('')->withHeader('Origin', 'http://review.test')->getJson($prefix.'/config')->assertUnauthorized();
+        $this->postJson($prefix.'/guests', ['name' => '   '])->assertUnprocessable();
+        $one = $this->postJson($prefix.'/guests', ['name' => 'Owner'])->assertCreated()->assertJsonPath('role', 'guest')->json();
+        $two = $this->postJson($prefix.'/guests', ['name' => 'Owner'])->assertCreated()->json();
+        $this->assertNotSame($one['id'], $two['id']);
+        $this->assertNotSame($one['token'], $two['token']);
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('memberships', 2);
+        $this->withToken($one['token'])->getJson($prefix.'/config')->assertOk()->assertJsonPath('mode', 'public')->assertJsonPath('role', 'guest');
+        $this->getJson('/api/v1/sites/'.$private.'/comments?url=http://review.test')->assertUnauthorized();
+        $this->withHeader('Origin', 'http://dashboard.test')->getJson($prefix.'/members')->assertUnauthorized();
+        $this->patchJson($prefix, ['name' => 'Take over', 'origins' => ['http://review.test']])->assertUnauthorized();
+        $this->withHeader('Origin', 'http://other.test')->getJson($prefix.'/config')->assertUnauthorized();
+        $this->withHeader('Origin', 'http://evil.test')->postJson($prefix.'/guests', ['name' => 'Visitor'])->assertForbidden();
+        $this->withHeader('Origin', 'http://review.test');
+        $comment = $this->postJson($prefix.'/comments', ['url' => 'http://review.test/page', 'title' => 'Page', 'body' => 'Public feedback', 'status' => 'open', 'client_id' => (string) Str::uuid(), 'anchor' => ['selector' => '#intro', 'text' => 'Intro', 'x' => 0.5, 'y' => 0.5, 'documentX' => 20, 'documentY' => 50, 'viewportWidth' => 1200]])->assertCreated()->assertJsonPath('category', 'general')->json();
+        $path = $prefix.'/comments/'.$comment['id'];
+        $this->postJson($path.'/replies', ['body' => 'Public reply', 'client_id' => (string) Str::uuid()])->assertOk();
+        $this->patchJson($path.'/category', ['category' => 'design', 'version' => 1])->assertOk();
+        $this->patchJson($path.'/status', ['status' => 'review', 'version' => 2])->assertOk();
+        $this->patchJson($path, ['body' => 'Edited by creator', 'version' => 3])->assertOk();
+        $upload = $this->postJson($path.'/attachments', ['client_id' => (string) Str::uuid(), 'file' => UploadedFile::fake()->image('screen.png')])->assertOk()->json();
+        $media = $upload['attachments'][0]['url'];
+        $this->get($media)->assertOk();
+        $this->withToken('')->get($media)->assertUnauthorized();
+        $this->withToken($two['token'])->patchJson($path, ['body' => 'Same name takeover', 'version' => 4])->assertForbidden();
+        $this->withToken($one['token'])->postJson($prefix.'/auth/logout')->assertOk();
+        $this->getJson($prefix.'/config')->assertUnauthorized();
+        $this->withToken($two['token'])->getJson($prefix.'/config')->assertOk();
+        DB::table('participants')->where('id', $two['id'])->update(['expires_at' => now()->subSecond()]);
+        $this->getJson($prefix.'/config')->assertUnauthorized();
+    }
 }

@@ -337,3 +337,33 @@ footer {
 .invite-section {
   margin-top: 40px;
 }
+
+.access-mode {
+  margin: 12px 0;
+  padding: 18px;
+  border: 1px solid #414e62;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+}
+.access-mode legend {
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.access-mode label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.5;
+}
+.access-mode input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 16px;
+  accent-color: #b8caff;
+}
+.site-mode {
+  margin-bottom: 24px;
+}

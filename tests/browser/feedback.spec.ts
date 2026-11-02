@@ -1135,6 +1135,93 @@ test("sidebar open and closed state survives reload and navigation", async ({
   await expect(launcher).toHaveAttribute("aria-expanded", "false");
 });
 
+test("public projects are permanent and visitors join by name without email", async ({
+  page,
+}) => {
+  await page.goto(appOrigin);
+  await expect(page.getByRole("radio", { name: /Private —/ })).toBeChecked();
+  await page
+    .getByLabel("Site name", { exact: true })
+    .fill("Public browser project");
+  await page
+    .getByLabel("Allowed website addresses", { exact: true })
+    .fill(appOrigin + "\n" + embedOrigin);
+  await page.getByRole("radio", { name: /Public —/ }).check();
+  await page.getByRole("button", { name: "Create site", exact: true }).click();
+  const installation = page.locator(".installation");
+  await expect(installation.locator(".site-mode")).toContainText("Public");
+  const publicId = await page
+    .locator(".site-row.selected")
+    .getAttribute("data-site-id");
+  await expect(page.getByRole("radio", { name: /Private —/ })).toBeChecked();
+  await installation
+    .getByRole("button", { name: "Edit site settings", exact: true })
+    .click();
+  await expect(installation.getByRole("radio")).toHaveCount(0);
+  await expect(installation.locator(".site-mode")).toContainText(
+    "cannot be changed",
+  );
+  await page.goto(appOrigin + "/demo.html?site=" + publicId);
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  const nameDialog = page.getByRole("dialog", {
+    name: "Enter your name",
+    exact: true,
+  });
+  await expect(nameDialog).toBeVisible();
+  await expect(
+    nameDialog.getByRole("textbox", { name: "Email address" }),
+  ).toHaveCount(0);
+  await nameDialog
+    .getByRole("textbox", { name: "Your name", exact: true })
+    .fill("Public visitor");
+  await nameDialog
+    .getByRole("textbox", { name: "Your name", exact: true })
+    .press("Enter");
+  await expect(nameDialog).toHaveCount(0);
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await page
+    .locator(".sidebar")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await page
+    .locator("#intro p")
+    .click({ modifiers: ["Shift"], position: { x: 80, y: 10 } });
+  const panel = page.getByRole("dialog", { name: "Comment", exact: true });
+  await panel
+    .getByRole("textbox", { name: "Comment", exact: true })
+    .fill("Public comment without registration");
+  await panel
+    .getByRole("combobox", { name: "Comment category", exact: true })
+    .selectOption("design");
+  await panel.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(panel.locator(".titlebar strong")).toHaveText("#1");
+  await expect(panel.locator(".author-row strong")).toHaveText(
+    "Public visitor",
+  );
+  await panel
+    .getByRole("textbox", { name: "Reply", exact: true })
+    .fill("Public reply");
+  await panel.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(panel.getByText("Public reply", { exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "Close", exact: true }).click();
+  await page.reload();
+  await openSidebar(page);
+  await expect(nameDialog).toHaveCount(0);
+  await expect(page.locator(".comment-row")).toHaveCount(1);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByText("Reviewing as Public visitor", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Sign out of this site", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "FlakFlak · Feedback" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "FlakFlak · Feedback" }).click();
+  await expect(nameDialog).toBeVisible();
+});
+
 test("site comment numbers continue across pages while shared links keep internal IDs", async ({
   page,
   request,

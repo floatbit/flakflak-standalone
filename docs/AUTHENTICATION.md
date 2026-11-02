@@ -2,9 +2,9 @@
 
 ## Access model
 
-All feedback is private. Every account must verify its email with a single-use magic link. Each site has one Owner and invited Members. A newly registered account can create its own site, but cannot access somebody else's site without accepting an invitation.
+Sites have a permanent access mode chosen at creation. Private is the default and requires a verified email account and accepted site invitation. Public allows widget visitors to enter a name without registering. Existing sites remain Private. Every dashboard account must verify its email with a single-use magic link. Each site has one Owner and may have invited Members. A newly registered account can create its own site, but cannot access somebody else's private site without accepting an invitation.
 
-Owners manage site settings, invitations, member removal, all feedback, and feedback reset. Members can read feedback, add comments/replies/files, reposition dots, change statuses, and edit/delete only their own contributions. There is no public/name-only feedback, Reviewer role, Viewer role, or social login in this release.
+Owners manage site settings, invitations, member removal, all feedback, and feedback reset. Members can read feedback, add comments/replies/files, reposition dots, change statuses, and edit/delete only their own contributions. Public visitors have the same feedback actions but can edit/delete only their own contributions and have no dashboard management access. Their names are unverified; matching the owner's name grants no extra permissions. There is no Reviewer role, Viewer role, or social login.
 
 The Members section displays Pending invitations and Accepted members. Copy invitation link shares a link to an invitation, not a sign-in credential. The recipient must verify the invited email and explicitly accept. Resend replaces the old invitation link. Delete invitation invalidates the link and removes its pending row. Accepted members instead have Remove member, which immediately removes server access and invalidates site tokens. Owners cannot remove themselves.
 
@@ -44,7 +44,7 @@ These local logs contain temporary links. Do not paste them into chat, commit lo
 
 ## Existing sites and name-only data
 
-The old owner key and guest tokens no longer grant access. Existing anonymous feedback is not assigned to accounts by name or email. It can be discarded using Reset feedback; migrations do not silently delete it.
+The old owner key and legacy guest tokens no longer grant access to Private sites. Newly issued public visitor sessions work only on sites created as Public. Existing anonymous feedback is not assigned to accounts by name or email. It can be discarded using Reset feedback; migrations do not silently delete it.
 
 After signing in with your owner email, from `api/` run:
 
@@ -68,11 +68,11 @@ Account sessions are opaque random bearer tokens, stored hashed server-side and 
 
 Widget sessions are scoped to a site and exact allowed origin for 24 hours, with membership checked on every API request. A popup sends a two-minute, single-use code to the exact opener origin, bound to a SHA-256 verifier challenge. It never shares the dashboard account token with an embedded website. Third-party cookies are not required. Sign out of this site revokes the current widget token; dashboard Sign out revokes all that account's sessions and handoffs.
 
-Attachments are fetched with the same authenticated session and rendered as local blob URLs. Public signed attachment URLs from older builds no longer work. Media responses use `Cache-Control: private, no-store`. Membership removal immediately blocks subsequent fetches; already downloaded content cannot be remotely recalled.
+Attachments are fetched with the same authenticated session and rendered as local blob URLs. Public signed attachment URLs from older builds no longer work. Media responses use `Cache-Control: private, no-store`. Membership removal immediately blocks that authenticated membership's subsequent fetches; on Public projects, anyone can still join by name. Already downloaded content cannot be remotely recalled.
 
 ## Production rollout on ServerPilot
 
-This release intentionally replaces the old public/name-only API. Coordinate a reload of existing widgets after deployment; older cached widgets will no longer have access. Do not deploy before production email delivery is ready.
+Private projects replace the old unrestricted name-only API; Public projects explicitly opt into name-only participation. Coordinate a reload of existing widgets after deployment; older cached widgets will no longer have access. Do not deploy before production email delivery is ready.
 
 1. Configure a verified sender and SMTP service in `/srv/users/serverpilot/flakflak-deploy/shared/api.env`:
 
@@ -113,3 +113,9 @@ Run `bash nuke.sh` from the standalone repository for its local API, or `bash nu
 Yes permanently deletes all accounts, sites, invitations, sessions, feedback, uploaded attachments, queues, and application cache. Code, environment configuration, database structure/migration history, logs, and backups remain. This is the entire standalone installation, not one site. Existing embed codes stop working; sign in again, create new sites, and install their new embed codes. No ownership claim is needed after a complete reset. The WordPress plugin is unaffected.
 
 Take a backup first if needed and pause external queue workers/scheduled jobs during a live reset. The command temporarily enables API maintenance mode and restores its previous state afterward. File cleanup precedes database deletion; a failure may leave some files removed. Browser drafts, downloaded files, mail-provider records, logs and backups cannot be remotely erased by this script. It is never run by deploy.sh. Test it only against disposable data before using it on an installation you want to erase.
+
+## Permanent access mode
+
+Site creation accepts `mode=private` (default) or `mode=public`. Updates reject the mode field, so it cannot be changed through dashboard settings or API calls. `GET /sites/{site}/access` exposes only the mode to an allowed origin; it does not expose private feedback, accounts, or allowed-origin lists. `POST /sites/{site}/guests` requires Public mode, an allowed origin, and a nonblank name, and is rate limited. All feedback endpoints still require a valid account/member session or an unexpired public-name session scoped to that exact site and origin. Public sessions cannot access account-management endpoints or private sites.
+
+Public visitor tokens are stored hashed in the participant record, with a 30-day expiry and exact origin binding. Sign-out rotates the stored token hash and expires it without deleting the visitor's contributions. Legacy anonymous identities without an origin binding cannot be used as new public sessions. No account or invitation is created by entering a name. Owners can still invite authenticated members to a Public site; the widget's optional Sign in as a member action uses the existing popup flow.

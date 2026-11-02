@@ -1907,7 +1907,7 @@ function start(siteId: string, base: string) {
       signOut.title = "Sign out of this site";
       signOut.setAttribute("aria-label", "Sign out of this site");
       accountRow.append(
-        el("strong", guest ? guest.name : "No name entered yet.", "settings-account-name"),
+        el("strong", guest ? "Hi, " + guest.name : "No name entered yet.", "settings-account-name"),
         signOut,
       );
       body.append(accountRow);

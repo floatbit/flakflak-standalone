@@ -1,5 +1,11 @@
 # Changelog
 
+## Settings greeting
+
+Commit message: Add a greeting to the Settings account row
+
+- Greet the signed-in contributor with “Hi,” before their display name.
+
 ## Compact sidebar overview
 
 Commit message: Simplify sidebar overview and remember All pages expansion

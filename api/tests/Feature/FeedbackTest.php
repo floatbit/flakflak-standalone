@@ -215,6 +215,26 @@ class FeedbackTest extends TestCase
         $this->assertSame(array_map(fn ($i) => 'Reply '.$i, range(1, 25)), array_column(array_merge($first['replies'], $older['replies'], $detail['replies']), 'body'));
     }
 
+    public function test_reply_editing_enforces_ownership_and_conflicts(): void
+    {
+        $site = $this->site();
+        $one = $this->guest($site);
+        $comment = $this->comment($site, $one);
+        $two = $this->guest($site, 'Other');
+        $path = '/api/v1/sites/'.$site.'/comments/'.$comment['id'];
+        $reply = $this->withToken($two['token'])->postJson($path.'/replies', ['body' => 'Original reply', 'client_id' => (string) Str::uuid()])->json('replies.0.id');
+        $payload = ['body' => 'Edited reply', 'original_body' => 'Original reply'];
+        $this->withToken($one['token'])->patchJson($path.'/replies/'.$reply, $payload)->assertForbidden();
+        $this->withToken($two['token'])->patchJson($path.'/replies/'.$reply, ['body' => '   ', 'original_body' => 'Original reply'])->assertUnprocessable();
+        $this->patchJson($path.'/replies/'.$reply, $payload)->assertOk()->assertJsonPath('replies.0.body', 'Edited reply');
+        $this->assertDatabaseHas('activity', ['comment_id' => $comment['id'], 'type' => 'reply', 'summary' => 'Edited reply']);
+        $this->patchJson($path.'/replies/'.$reply, $payload)->assertConflict();
+        DB::table('replies')->where('id', $reply)->update(['kind' => 'status']);
+        $this->patchJson($path.'/replies/'.$reply, ['body' => 'History edit', 'original_body' => 'Edited reply'])->assertForbidden();
+        $other = $this->comment($site, $two);
+        $this->patchJson('/api/v1/sites/'.$site.'/comments/'.$other['id'].'/replies/'.$reply, $payload)->assertNotFound();
+    }
+
     public function test_reply_and_attachment_deletion_enforce_ownership(): void
     {
         Storage::fake('local');

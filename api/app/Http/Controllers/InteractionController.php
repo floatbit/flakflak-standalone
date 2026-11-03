@@ -80,6 +80,23 @@ class InteractionController extends Controller
         return response()->json(['deleted' => true]);
     }
 
+    public function updateReply(Request $r, string $site, string $comment, string $reply)
+    {
+        $v = $r->validate(['body' => 'required|string|max:10000', 'original_body' => 'required|string|max:10000']);
+        abort_unless(trim($v['body']) !== '', 422, 'Enter a reply first.');
+        DB::transaction(function () use ($r, $site, $comment, $reply, $v) {
+            $this->comment($site, $comment, true);
+            $row = DB::table('replies')->where('comment_id', $comment)->where('id', $reply)->lockForUpdate()->firstOrFail();
+            abort_unless($row->participant_id === $r->attributes->get('participant')->id, 403, 'Only the contributor can edit this reply.');
+            abort_unless($row->kind === 'reply', 403, 'Status history cannot be edited as a reply.');
+            abort_unless($row->body === $v['original_body'], 409, 'This reply changed. Refresh before editing.');
+            DB::table('replies')->where('id', $reply)->update(['body' => trim($v['body']), 'updated_at' => now()]);
+            DB::table('activity')->where('site_id', $site)->where('comment_id', $comment)->where('participant_id', $row->participant_id)->where('type', 'reply')->where('summary', $row->body)->where('created_at', $row->created_at)->update(['summary' => trim($v['body'])]);
+        });
+
+        return app(FeedbackController::class)->detail($r, $site, $comment);
+    }
+
     public function deleteReply(Request $r, string $site, string $comment, string $reply)
     {
         $this->comment($site, $comment);

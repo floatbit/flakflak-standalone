@@ -44,6 +44,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('/comments/{comment}', [I::class, 'update'])->whereNumber('comment');
         Route::patch('/comments/{comment}/anchor', [I::class, 'move'])->whereNumber('comment');
         Route::delete('/comments/{comment}', [I::class, 'delete'])->whereNumber('comment');
+        Route::patch('/comments/{comment}/replies/{reply}', [I::class, 'updateReply'])->whereNumber(['comment', 'reply']);
         Route::delete('/comments/{comment}/replies/{reply}', [I::class, 'deleteReply'])->whereNumber(['comment', 'reply']);
         Route::delete('/comments/{comment}/attachments/{attachment}', [I::class, 'deleteAttachment'])->whereNumber(['comment', 'attachment']);
         Route::post('/comments/{comment}/replies', [F::class, 'reply']);

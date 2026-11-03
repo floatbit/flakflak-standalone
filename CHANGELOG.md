@@ -1,5 +1,31 @@
 # Changelog
 
+## Reply editing and widget layout polish
+
+Commit message: Add reply editing and streamline widget layouts
+
+- Group Cancel then Save on the right in comment/reply editors and resolution forms.
+- Mark the active sidebar comment with a slim accent border matching the thread, clearing selection when closed.
+- Apply a shared 8/12/16/24px spacing rhythm to thread headers, messages, fields, actions, composer, sidebar filters, and Settings groups.
+- Align message text and editor actions without changing theme colors or attachment drop-area height.
+- Retain Comments, Activity, and Settings headings with matching accessible view labels.
+- Tighten the page header, clamp titles to two lines with full-title tooltips, and show active/closed counts.
+- Mute Expand/Collapse all until hovered and add a clear-search action.
+- Match left-aligned Show/Hide earlier replies to the muted Expand all styling; use text-color-only hover feedback for both controls.
+- Move Copy link into the details toolbar beside Reposition Dot and use an ellipsis for Comment actions beside Close.
+- Remove the reply count, restore status colors in compact history, and keep the thread header visible while scrolling.
+- Clarify Comment details, highlight its expanded state, and show file-upload and drag-over feedback.
+- Shorten thread dates with full-date tooltips, group category badges with authors, and align Emerald action corner styling.
+- Render history as compact sentences, with expandable resolution notes.
+- Arrange thread attachment thumbnails in four responsive columns.
+- Hide previous/next navigation, show history as compact lines, and edit category through its badge.
+- Make the full attachment box a clickable drag-and-drop area without outer padding; use clear browse/paste instructions; remove the redundant Attachments heading and Add Files button while retaining an accessible section label.
+- Expand the compact reply field on focus and simplify the Status heading.
+- Let contributors edit their own replies inline with Save, Cancel, and Cmd/Ctrl+Enter.
+- Group the reply edit and delete icons together at the right of the reply header.
+- Enforce ownership and protect status history; reject stale edits and keep activity previews in sync.
+- Preserve the original reply date and avoid database schema changes.
+
 ## Settings account placement
 
 Commit message: Move Settings account controls to the bottom and tighten spacing

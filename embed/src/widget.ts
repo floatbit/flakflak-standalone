@@ -828,6 +828,7 @@ function start(siteId: string, base: string) {
     panel.classList.add("hide");
     activeAnchor = null;
     thread = null;
+    syncActiveComment();
     pending.forEach((p) => URL.revokeObjectURL(p.url));
     pending = [];
     renderDots();
@@ -1187,7 +1188,13 @@ function start(siteId: string, base: string) {
     replyId = crypto.randomUUID();
     renderThread();
     renderDots();
+    syncActiveComment();
     await markSeen(loaded);
+  }
+  function syncActiveComment() {
+    sidebar.querySelectorAll<HTMLButtonElement>(".comment-row").forEach((row) => {
+      row.setAttribute("aria-pressed", String(Number(row.dataset.commentId) === thread?.comment.id));
+    });
   }
   const collapsedReplies = new WeakSet<Thread>();
   function renderThread() {
@@ -1198,23 +1205,11 @@ function start(siteId: string, base: string) {
     panel.classList.add("thread");
     const header = titlebar("#" + c.comment_number, closePanel);
     header.classList.add("thread-header");
-    const stamp = el(
-      "span",
-      new Date(
-        c.created_at.includes("T")
-          ? c.created_at
-          : c.created_at.replace(" ", "T") + "Z",
-      )
-        .toLocaleString("en-US", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "numeric",
-          minute: "2-digit",
-        })
-        .replace(",", ""),
-      "comment-date",
-    );
+    const createdDate = new Date(c.created_at.includes("T") ? c.created_at : c.created_at.replace(" ", "T") + "Z");
+    const stamp = el("span", createdDate.toLocaleString("en-US", {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    }), "comment-date");
+    stamp.title = createdDate.toLocaleString();
     header.firstElementChild?.after(stamp);
     panel.replaceChildren(header);
     const body = el("div", "", "body");
@@ -1243,7 +1238,7 @@ function start(siteId: string, base: string) {
       el("span", index + 1 + " of " + ordered.length, "meta"),
       next,
     );
-    panel.append(navigation);
+    // Review navigation is intentionally hidden for now.
     const tools = el("div", "", "toolbar");
     let copyFeedback: ReturnType<typeof setTimeout> | undefined;
     const copyLink = button("Copy link", async () => {
@@ -1271,8 +1266,9 @@ function start(siteId: string, base: string) {
       },
       "details-toggle",
     );
-    toggleDetails.setAttribute("aria-label", "Details");
-    toggleDetails.title = "Details";
+    toggleDetails.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
+    toggleDetails.setAttribute("aria-label", "Comment actions");
+    toggleDetails.title = "Comment actions";
     toggleDetails.setAttribute("aria-expanded", "false");
     toggleDetails.setAttribute("aria-controls", details.id);
     header.insertBefore(toggleDetails, header.lastElementChild);
@@ -1308,15 +1304,16 @@ function start(siteId: string, base: string) {
             "primary",
           );
           const editor = el("div", "", "comment-editor");
-          editor.append(
-            edit,
-            save,
-            button("Cancel edit", () => {
+          const editActions = el("div", "", "actions editor-actions");
+          editActions.append(
+            button("Cancel", () => {
               editor.remove();
               original?.classList.remove("hide");
               position();
             }),
+            save,
           );
+          editor.append(edit, editActions);
           original?.classList.add("hide");
           if (original) original.before(editor);
           else body.append(editor);
@@ -1329,13 +1326,17 @@ function start(siteId: string, base: string) {
     const copy = tools.firstElementChild as HTMLButtonElement,
       refresh = tools.lastElementChild as HTMLButtonElement;
     copy.classList.add("copy-link");
-    header.insertBefore(copy, header.lastElementChild);
+    controls.append(copy);
     controls.prepend(refresh);
     details.append(controls);
     const author = el("div", "", "author-row");
     author.append(
       el("strong", c.name),
-      el("span", categoryName(c.category), "category-badge"),
+      button(categoryName(c.category), () => {
+        const select = author.querySelector<HTMLSelectElement>("select");
+        if (select) { select.hidden = !select.hidden; if (!select.hidden) select.focus(); }
+        position();
+      }, "category-badge thread-category-toggle"),
     );
     const pencil = Array.from(controls.querySelectorAll("button")).find(
       (b) => b.textContent === "Edit comment",
@@ -1347,7 +1348,7 @@ function start(siteId: string, base: string) {
       pencil.classList.add("edit-pencil");
       author.append(pencil);
     }
-    panel.insertBefore(details, navigation);
+    panel.append(details);
     const commentText = historyText(c.body, false);
     commentText.classList.add("comment-text");
     body.append(author, commentText);
@@ -1360,13 +1361,6 @@ function start(siteId: string, base: string) {
         ),
       );
     if (t.reply_count) {
-      body.append(
-        el(
-          "div",
-          t.reply_count + " " + (t.reply_count === 1 ? "reply" : "replies"),
-          "meta",
-        ),
-      );
       const collapsed = collapsedReplies.has(t);
       if (collapsed || t.reply_before)
         body.append(
@@ -1406,6 +1400,30 @@ function start(siteId: string, base: string) {
         body.append(hide);
       }
       for (const reply of collapsed ? t.replies.slice(-2) : t.replies) {
+        if (reply.kind !== "reply") {
+          const history = el("div", "", "reply-history");
+          const [change, ...note] = reply.body.split(". Resolution note: ");
+          const action = change.replace(/^Status updated to /, "changed status to ").replace(/^Category updated to /, "changed category to ").replace(/\.$/, "");
+          const line = el("div", "", "history-line");
+          const statusMatch = action.match(/^changed status to (open|review|content|closed)$/);
+          if (statusMatch) {
+            line.append(document.createTextNode(reply.name + " changed status to "));
+            const status = el("strong", statusMatch[1], "history-status");
+            status.dataset.status = statusMatch[1];
+            status.style.color = "var(--ff-status-" + statusMatch[1] + ", " + colors[statusMatch[1] as Status] + ")";
+            line.append(status, document.createTextNode(" · " + date(reply.created_at)));
+          } else {
+            line.textContent = reply.name + " " + action + " · " + date(reply.created_at);
+          }
+          history.append(line);
+          if (note.length) {
+            const resolution = el("details", "", "history-resolution");
+            resolution.append(el("summary", "Resolution note"), historyText(note.join(". Resolution note: "), false));
+            history.append(resolution);
+          }
+          body.append(history);
+          continue;
+        }
         const row = el("div", "", "reply");
         const replyHeader = el("div", "", "reply-header"),
           replyMeta = el("div", "", "reply-meta");
@@ -1413,7 +1431,7 @@ function start(siteId: string, base: string) {
         replyHeader.append(el("strong", reply.name), replyMeta);
         row.append(
           replyHeader,
-          historyText(reply.body, reply.kind === "status"),
+          historyText(reply.body, false),
         );
         if (
           (guest?.role === "owner" || guest?.id === reply.participant_id) &&
@@ -1440,10 +1458,47 @@ function start(siteId: string, base: string) {
           trash.setAttribute("aria-label", "Delete reply");
           trash.title = "Delete reply";
         }
+        if (guest?.id === reply.participant_id && reply.kind === "reply") {
+          const editReply = button("✎", () => {
+            if (row.querySelector(".reply-editor")) return;
+            const text = row.lastElementChild as HTMLElement;
+            const editor = el("div", "", "reply-editor");
+            const field = el("textarea");
+            field.value = reply.body;
+            field.maxLength = 10000;
+            field.setAttribute("aria-label", "Edit reply");
+            const save = button("Save changes", () => perform(async () => {
+              if (!field.value.trim()) throw new Error("Enter a reply first.");
+              thread = await request<Thread>("/comments/" + c.id + "/replies/" + reply.id, {
+                method: "PATCH",
+                body: json({ body: field.value.trim(), original_body: reply.body }),
+              });
+              renderThread();
+              await load();
+            }), "primary");
+            const actions = el("div", "", "actions editor-actions");
+            actions.append(button("Cancel", () => {
+              editor.remove();
+              text.classList.remove("hide");
+              editReply.focus();
+              position();
+            }), save);
+            editor.append(field, actions);
+            text.classList.add("hide");
+            row.append(editor);
+            shortcut(field, save);
+            position();
+            field.focus();
+          }, "reply-edit");
+          editReply.title = "Edit reply";
+          editReply.setAttribute("aria-label", "Edit reply");
+          replyMeta.append(editReply);
+        }
         body.append(row);
       }
     }
     const input = el("textarea");
+    input.rows = 2;
     input.placeholder = "Write a reply…";
     input.setAttribute("aria-label", "Reply");
     input.maxLength = 10000;
@@ -1530,12 +1585,18 @@ function start(siteId: string, base: string) {
     upload.multiple = true;
     upload.accept = "image/png,image/jpeg,image/webp,image/gif,video/mp4";
     upload.setAttribute("aria-label", "Add attachments");
+    const uploadStatus = el("div", "", "upload-status hide");
+    uploadStatus.setAttribute("role", "status");
     async function flushUploads() {
       await perform(async () => {
         await ensureMember();
         const queue = threadUploads.get(c.id) || [];
+        const uploadTotal = queue.length;
+        uploadStatus.classList.remove("hide");
+        uploadStatus.setAttribute("aria-busy", "true");
         try {
           while (queue.length) {
+            uploadStatus.textContent = "Uploading file " + (uploadTotal - queue.length + 1) + " of " + uploadTotal + "…";
             const pending = queue[0],
               form = new FormData();
             form.set("file", pending.file);
@@ -1552,6 +1613,7 @@ function start(siteId: string, base: string) {
             }
           }
         } finally {
+          uploadStatus.removeAttribute("aria-busy");
           renderThread();
         }
       });
@@ -1607,7 +1669,7 @@ function start(siteId: string, base: string) {
     const attachmentDrop = el("div", "", "drop");
     upload.classList.add("native-file");
     attachmentDrop.textContent =
-      "Drop files or paste an image here (JPG, PNG, MP4)";
+      "Drop files, click to browse, or paste an image\nJPG, PNG, MP4";
     attachmentDrop.tabIndex = 0;
     attachmentDrop.setAttribute("role", "button");
     attachmentDrop.setAttribute("aria-label", "Browse attachment files");
@@ -1631,16 +1693,12 @@ function start(siteId: string, base: string) {
       if (e.dataTransfer && !busy)
         uploadFiles(Array.from(e.dataTransfer.files));
     };
-    const attachmentSection = el("section", "", "attachments-section"),
-      attachmentHeading = el("div", "", "attachments-heading");
-    attachmentHeading.append(
-      el("span", "Attachments"),
-      button("Add Files", () => upload.click()),
-    );
+    const attachmentSection = el("section", "", "attachments-section");
+    attachmentSection.setAttribute("aria-label", "Attachments");
     attachmentSection.append(
-      attachmentHeading,
       attachments,
       pendingList,
+      uploadStatus,
       attachmentDrop,
       upload,
     );
@@ -1663,8 +1721,15 @@ function start(siteId: string, base: string) {
         }
       });
     };
-    categoryControl.append(el("label", "Category"), category);
-    statusSection.append(categoryControl, el("label", "Change status"));
+    category.hidden = true;
+    category.classList.add("inline-category-select");
+    author.append(category);
+    const categoryBadge = author.querySelector<HTMLButtonElement>(".thread-category-toggle");
+    categoryBadge?.setAttribute("aria-label", "Change category: " + categoryName(c.category));
+    if (categoryBadge) categoryBadge.title = "Change category";
+    const statusLabel = el("label", "Status");
+    statusLabel.title = "Click to change";
+    statusSection.append(statusLabel);
     const statusGrid = el("div", "", "status-grid");
     for (const s of statuses) {
       const b = button(s[0].toUpperCase() + s.slice(1), async () => {
@@ -1715,7 +1780,7 @@ function start(siteId: string, base: string) {
       );
       discard.setAttribute("aria-label", "Discard resolution draft");
       const actions = el("div", "", "resolution-actions"),
-        buttons = el("div", "", "resolution-buttons");
+        buttons = el("div", "", "resolution-buttons editor-actions");
       buttons.append(
         button("Cancel", () => form.remove()),
         submit,
@@ -1882,9 +1947,9 @@ function start(siteId: string, base: string) {
       tabs.append(b);
     }
     header.insertBefore(tabs, gear);
-    sidebar.append(
-      el("h2", view === "activity" ? "Recent Activity" : view[0].toUpperCase() + view.slice(1), "sidebar-view-title"),
-    );
+    const viewTitle = view[0].toUpperCase() + view.slice(1);
+    sidebar.setAttribute("aria-label", viewTitle);
+    sidebar.append(el("h2", viewTitle, "sidebar-view-title"));
     if (view === "settings") {
       body.id = "ff-settings";
       const accountRow = el("div", "", "settings-account");
@@ -2152,11 +2217,10 @@ function start(siteId: string, base: string) {
       ),
       pageTotal = el(
         "div",
-        comments.length +
-          " " +
-          (comments.length === 1 ? "comment" : "comments"),
+        comments.filter((item) => item.status !== "closed").length + " active · " + comments.filter((item) => item.status === "closed").length + " closed",
         "meta sidebar-total",
       );
+    pageTitle.title = document.title || location.hostname;
     body.append(pageLabel, pageTitle);
     const add = button(armed ? "Cancel placement" : "＋ Add comment", () => {
       armed = !armed;
@@ -2256,11 +2320,24 @@ function start(siteId: string, base: string) {
     input.placeholder = "Search comments, authors, or #";
     input.setAttribute("aria-label", "Search this page");
     input.value = search;
+    const searchControl = el("div", "", "sidebar-search-control");
+    const clearSearch = button("×", () => {
+      input.value = "";
+      search = "";
+      clearSearch.hidden = true;
+      renderList();
+      input.focus();
+    }, "clear-search");
+    clearSearch.setAttribute("aria-label", "Clear search");
+    clearSearch.title = "Clear search";
+    clearSearch.hidden = !search;
     input.oninput = () => {
       search = input.value;
+      clearSearch.hidden = !search;
       renderList();
     };
-    body.append(input);
+    searchControl.append(input, clearSearch);
+    body.append(searchControl);
     const groupToggle = button("Collapse all", () => {
       const groups = Array.from(list.querySelectorAll("details"));
       const open = groups.every((group) => !group.open);
@@ -2292,7 +2369,7 @@ function start(siteId: string, base: string) {
       pageLabel,
       pageTitle,
       pageTotal,
-      input,
+      searchControl,
       unreadTools,
       add,
     );
@@ -2355,6 +2432,7 @@ function start(siteId: string, base: string) {
         };
         for (const c of group) {
           const b = button("", () => openThread(c.id), "row comment-row");
+          b.dataset.commentId = String(c.id);
           b.dataset.status = s;
           b.style.setProperty("--dot-color", dotColors[s]);
           b.setAttribute("aria-pressed", String(thread?.comment.id === c.id));
